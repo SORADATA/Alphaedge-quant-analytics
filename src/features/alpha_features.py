@@ -6,10 +6,12 @@ import statsmodels.api as sm
 from statsmodels.regression.rolling import RollingOLS
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
-
 from const import (
-    RSI_WINDOW, BB_WINDOW, BB_STD,
-    MIN_HISTORY_TA, MIN_HISTORY_FF,
+    RSI_WINDOW,
+    BB_WINDOW,
+    BB_STD,
+    MIN_HISTORY_TA,
+    MIN_HISTORY_FF,
     FAMA_FRENCH_FACTORS,
 )
 from src.utils.feature_utils import compute_atr, compute_macd
