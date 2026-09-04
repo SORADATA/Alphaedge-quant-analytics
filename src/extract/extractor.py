@@ -9,15 +9,13 @@ Stratégie :
   - Retry automatique (3 tentatives, 5s entre chaque)
   - Validation des données avant sauvegarde
 """
-
-import time
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
+from dataclasses import dataclass, field
+import time
+from datetime import datetime
 import pandas as pd
 import yfinance as yf
-
 from const import DATA_DIR
 from src.utils.logger import setup_logger
 
@@ -28,34 +26,27 @@ _DOWNLOAD_RETRY_WAIT = 5
 _DELTA_OVERLAP_DAYS = 5
 
 
+@dataclass
 class MarketExtractor:
     """
     Gère uniquement le téléchargement des données boursières brutes.
-
-    Parameters
-    ----------
-    market_name   : str  — nom du marché (ex: 'CAC40')
-    tickers       : list[str] — liste des tickers yfinance
-    history_years : int  — années d'historique pour le premier téléchargement
     """
+    market_name: str
+    tickers: list[str]
+    history_years: int = 10
+    # Déclaration des attributs qui ne sont pas passés dans le constructeur
+    raw_data_path: Path = field(init=False)
+    file_path: Path = field(init=False)
+    data: pd.DataFrame = field(init=False)
 
-    def __init__(
-        self,
-        market_name: str,
-        tickers: list[str],
-        history_years: int = 10,
-    ):
-        self.market_name = market_name
-        self.tickers = tickers
-        self.history_years = history_years
-
+    def __post_init__(self):
         self.raw_data_path = DATA_DIR / "raw" / self.market_name
         self.raw_data_path.mkdir(parents=True, exist_ok=True)
         self.file_path = self.raw_data_path / f"{self.market_name}_raw.csv"
 
         self.data = pd.DataFrame()
         logger.info(
-            f"Extracteur initialisé : {self.market_name} ({len(tickers)} tickers)"
+            f"Extracteur initialisé : {self.market_name} ({len(self.tickers)} tickers)"
         )
 
     # Helpers privés
@@ -80,11 +71,6 @@ class MarketExtractor:
     def _validate_download(self, df: pd.DataFrame) -> bool:
         """
         Vérifie que le téléchargement est utilisable.
-
-        Critères :
-          - Non vide
-          - Au moins 1 ticker valide (non entièrement NaN)
-          - Colonne 'adj close' présente
         """
         if df.empty:
             logger.warning("DataFrame téléchargé est vide.")
@@ -96,7 +82,6 @@ class MarketExtractor:
                 )
             return False
 
-        # Vérifier qu'au moins un ticker a des données réelles
         valid_tickers = (
             df["adj close"]
             .unstack("ticker")
@@ -120,10 +105,6 @@ class MarketExtractor:
     def _parse_yfinance(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Normalise le DataFrame yfinance vers le format (date, ticker) MultiIndex.
-
-        Gère les deux formats yfinance :
-          - MultiIndex colonnes (Price, Ticker)  → stack level=1
-          - Index simple (un seul ticker)         → ajout colonne ticker
         """
         if isinstance(df.columns, pd.MultiIndex):
             df = df.stack(level=1, future_stack=True)
@@ -143,7 +124,6 @@ class MarketExtractor:
     ) -> pd.DataFrame:
         """
         Fusionne les données existantes avec le delta téléchargé.
-        En cas de doublon sur (date, ticker), garde la valeur la plus récente (keep='last').
         """
         merged = pd.concat([existing_df, new_df])
         merged = merged[~merged.index.duplicated(keep="last")].sort_index()
@@ -154,12 +134,6 @@ class MarketExtractor:
     def fetch_market_data(self) -> Optional[pd.DataFrame]:
         """
         Télécharge les données brutes.
-        - Delta si fichier existant (depuis last_date - 5 jours)
-        - Téléchargement complet sinon
-
-        Returns
-        -------
-        pd.DataFrame avec MultiIndex (date, ticker) ou None si échec.
         """
         existing_df = self._load_existing()
 
@@ -181,7 +155,7 @@ class MarketExtractor:
                     self.tickers,
                     start=start_date,
                     end=end_date,
-                    auto_adjust=False,   # garde Adj Close séparé de Close
+                    auto_adjust=False,
                     progress=False,
                     threads=True,
                 )
@@ -193,22 +167,18 @@ class MarketExtractor:
                     time.sleep(_DOWNLOAD_RETRY_WAIT)
                     continue
 
-                # Normalisation du format yfinance
                 df = self._parse_yfinance(raw)
 
-                # Validation avant fusion
                 if not self._validate_download(df):
                     logger.warning(f"Validation échouée (tentative {attempt}/{_DOWNLOAD_RETRIES})")
                     time.sleep(_DOWNLOAD_RETRY_WAIT)
                     continue
 
-                # Fusion avec l'historique existant
                 if existing_df is not None:
                     self.data = self._merge_with_existing(existing_df, df)
                 else:
                     self.data = df
 
-                # Sauvegarde
                 self.data.to_csv(self.file_path, sep=";")
                 logger.info(
                     f"[{self.market_name}] Base brute enregistrée : "
