@@ -9,9 +9,7 @@ Fonctions :
 """
 
 from datetime import datetime
-
 import pandas as pd
-
 from src.utils.logger import setup_logger
 
 logger = setup_logger("data_loader")
