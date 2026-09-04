@@ -46,14 +46,17 @@ jobs:
         id: markets
         run: |
           MARKETS=$(python -c "
-          import json, glob
+          import yaml, glob
           names = []
-          for f in sorted(glob.glob('config/markets/*.json')):
+          # Capter .yml et .yaml
+          files = glob.glob('config/markets/*.yml') + glob.glob('config/markets/*.yaml')
+          for f in sorted(files):
               try:
-                  with open(f) as fh:
-                      names.append(json.load(fh).get('market_name', 'UNKNOWN'))
-              except Exception:
-                  pass
+                  with open(f, encoding='utf-8') as fh:
+                      # Utilisation de yaml.safe_load au lieu de json.load
+                      names.append(yaml.safe_load(fh).get('market_name', 'UNKNOWN'))
+              except Exception as e:
+                  print(f'Erreur sur {f}: {e}') 
           print(' & '.join(names))
           ")
           echo "list=$MARKETS" >> "$GITHUB_OUTPUT"
