@@ -8,23 +8,19 @@ actuel.
 """
 
 from __future__ import annotations
-
 import json
 import os
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-
 import pandas as pd
 from dotenv import load_dotenv
 from sklearn.metrics import average_precision_score, roc_auc_score
-
 import mlflow
 from mlflow.exceptions import MlflowException
 from mlflow.models.signature import infer_signature
 from mlflow.tracking import MlflowClient
-
 from const import CONFIG_DIR, DATA_DIR, MAX_DD_THRESHOLD, MODEL_DIR, SHARPE_THRESHOLD
 from src.features.alpha_features import add_all_features
 from src.models.ensemble import AlphaEdgeEnsemble

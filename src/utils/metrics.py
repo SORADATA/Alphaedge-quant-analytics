@@ -19,7 +19,11 @@ import pandas as pd
 # ÉVALUATION MODÈLE (walk-forward / backtest)
 # ══════════════════════════════════════════════════════════════════
 
-def calculate_financial_metrics(df_test: pd.DataFrame, probas: np.ndarray, threshold: float = 0.5) -> dict:
+def calculate_financial_metrics(
+    df_test: pd.DataFrame,
+    probas: np.ndarray,
+    threshold: float = 0.5
+) -> dict:
     """
     Calcule sharpe / max_drawdown / total_return à partir des probabilités
     prédites par le modèle sur un jeu de test (index multi = ticker/date).

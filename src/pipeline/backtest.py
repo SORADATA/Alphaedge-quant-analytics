@@ -3,13 +3,10 @@ Moteur de backtest et de génération de signaux live pour AlphaEdge.
 """
 
 from __future__ import annotations
-
 from typing import Any, Dict, List, Optional, Tuple
-
 import numpy as np
 import pandas as pd
 from pypfopt import risk_models, expected_returns, EfficientCVaR, black_litterman
-
 from const import (
     TRADING_DAYS_YEAR,
     RISK_FREE_RATE,
@@ -35,7 +32,11 @@ MIN_FEATURE_HISTORY = 12
 # 1. CONSTRUCTION DE PORTEFEUILLE & HELPERS
 # =============================================================================
 
-def get_optimal_weights(prices_df: pd.DataFrame, probas_subset: Optional[pd.Series] = None, risk_free_rate: float = RISK_FREE_RATE) -> Tuple[Dict[str, float], str]:
+def get_optimal_weights(
+    prices_df: pd.DataFrame,
+    probas_subset: Optional[pd.Series] = None,
+    risk_free_rate: float = RISK_FREE_RATE
+) -> Tuple[Dict[str, float], str]:
     """
     Optimisation des poids combinant Black-Litterman (via les probabilités du ML)
     et EfficientCVaR (Expected Shortfall) pour maîtriser les risques extrêmes.

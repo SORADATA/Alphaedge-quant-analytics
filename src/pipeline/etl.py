@@ -1,9 +1,7 @@
 import json
 from datetime import datetime
 from typing import Optional, Tuple
-
 import pandas as pd
-
 from const import DATA_DIR, BASE_DIR
 from src.extract.extractor import MarketExtractor
 from src.transform.processor import MarketDataProcessor
@@ -14,7 +12,9 @@ from src.utils.logger import setup_logger
 logger = setup_logger("etl")
 
 
-def get_data_pipeline(market_config: dict) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+def get_data_pipeline(
+    market_config: dict
+) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     market_name = market_config["market_name"]
     tickers = market_config["tickers"]
 

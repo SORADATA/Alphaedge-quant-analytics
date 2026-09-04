@@ -12,14 +12,13 @@ import pandas as pd
 import optuna
 import pickle
 from typing import Dict, List, Optional
-
 import xgboost as xgb
 import lightgbm as lgb
+from dataclasses import dataclass, field
 from sklearn.linear_model import LogisticRegression, RidgeClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.base import BaseEstimator, ClassifierMixin
-
 from src.models.cv import PurgedTimeSeriesSplit
 from src.utils.logger import setup_logger
 from const import FEATURE_GROUPS
@@ -108,7 +107,7 @@ def _lgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> lgb.LGBMClas
             "learning_rate":    trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
             "subsample":        trial.suggest_float("subsample", 0.6, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "min_child_samples":trial.suggest_int("min_child_samples", 5, 50),
+            "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
             "reg_alpha":        trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
             "reg_lambda":       trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
             "random_state": 42, "n_jobs": -1, "verbose": -1,
@@ -139,28 +138,21 @@ def _lgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> lgb.LGBMClas
 # ALPHAEDGE ENSEMBLE
 # ══════════════════════════════════════════════════════════════════
 
+@dataclass
 class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
-    """
-    Ensemble à 2 niveaux :
-      Niveau 0 : XGBoost + LightGBM + Ridge (calibré)
-      Niveau 1 : LogisticRegression (méta-learner)
+    n_optuna_trials: int = 50
 
-    Le méta-learner est entraîné sur les probabilités out-of-fold
-    des modèles de base via PurgedTimeSeriesSplit.
+    # Déclaration stricte des variables internes de la dataclass
+    xgb_model_: Optional[xgb.XGBClassifier] = field(init=False, default=None)
+    lgb_model_: Optional[lgb.LGBMClassifier] = field(init=False, default=None)
+    ridge_model_: Optional[CalibratedClassifierCV] = field(init=False, default=None)
+    meta_model_: Optional[LogisticRegression] = field(init=False, default=None)
+    scaler_: Optional[StandardScaler] = field(init=False, default=None)
+    features_: Optional[List[str]] = field(init=False, default=None)
+    classes_: np.ndarray = field(init=False)
 
-    Parameters
-    ----------
-    n_optuna_trials : int — nombre d'essais Optuna par modèle de base
-    """
-
-    def __init__(self, n_optuna_trials: int = 50):
-        self.n_optuna_trials = n_optuna_trials
-        self.xgb_model_: Optional[xgb.XGBClassifier] = None
-        self.lgb_model_: Optional[lgb.LGBMClassifier] = None
-        self.ridge_model_: Optional[CalibratedClassifierCV] = None
-        self.meta_model_:  Optional[LogisticRegression] = None
-        self.scaler_:      Optional[StandardScaler] = None
-        self.features_:    Optional[List[str]] = None
+    def __post_init__(self):
+        """S'exécute automatiquement après l'initialisation."""
         self.classes_ = np.array([0, 1])
 
     def _oof_probas(
@@ -170,14 +162,18 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
         model_cls,
         fit_kwargs: dict,
     ) -> np.ndarray:
-        """Génère les probabilités out-of-fold pour le méta-learner."""
         oof = np.zeros(len(X))
         cv = PurgedTimeSeriesSplit(n_splits=5)
 
         for tr_idx, val_idx in cv.split(X):
             m = model_cls(**fit_kwargs)
             m.fit(X.iloc[tr_idx], y.iloc[tr_idx])
-            oof[val_idx] = m.predict_proba(X.iloc[val_idx])[:, 1]
+            
+            # Gestion spécifique pour RidgeClassifier qui n'a pas predict_proba natif
+            if hasattr(m, "predict_proba"):
+                oof[val_idx] = m.predict_proba(X.iloc[val_idx])[:, 1]
+            else:
+                oof[val_idx] = m.decision_function(X.iloc[val_idx])
 
         return oof
 
@@ -189,7 +185,6 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
             raise ValueError("Aucune feature disponible dans df.")
 
         X = _prepare_X(df, self.features_)
-
         trials_each = max(10, self.n_optuna_trials // 2)
 
         logger.info("  [1/3] XGBoost...")
@@ -205,13 +200,24 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
         self.ridge_model_ = CalibratedClassifierCV(ridge_base, cv=5, method="sigmoid")
         self.ridge_model_.fit(X_scaled, y)
 
-        # ── Niveau 1 : méta-learner sur probas OOF
+        # ── Niveau 1 : méta-learner sur probas OOF (Correction du Leakage)
         logger.info("  [Meta] Stacking LogisticRegression...")
-        oof_xgb = self._oof_probas(X, y, xgb.XGBClassifier,
-                                     {**self.xgb_model_.get_params(), "eval_metric": "auc"})
-        oof_lgb = self._oof_probas(X, y, lgb.LGBMClassifier,
-                                     {**self.lgb_model_.get_params(), "verbose": -1})
-        oof_ridge = self.ridge_model_.predict_proba(X_scaled)[:, 1]
+        oof_xgb = self._oof_probas(
+            X, y, xgb.XGBClassifier, {**self.xgb_model_.get_params(), "eval_metric": "auc"}
+            )
+        oof_lgb = self._oof_probas(
+            X, y, lgb.LGBMClassifier, {**self.lgb_model_.get_params(), "verbose": -1}
+            )
+
+        # Calcul propre du OOF pour le modèle Ridge calibré
+        oof_ridge = np.zeros(len(X_scaled))
+        cv = PurgedTimeSeriesSplit(n_splits=5)
+        for tr_idx, val_idx in cv.split(X_scaled):
+            m_ridge = CalibratedClassifierCV(
+                RidgeClassifier(alpha=1.0, random_state=42), cv=3, method="sigmoid"
+                )
+            m_ridge.fit(X_scaled.iloc[tr_idx], y.iloc[tr_idx])
+            oof_ridge[val_idx] = m_ridge.predict_proba(X_scaled.iloc[val_idx])[:, 1]
 
         meta_X = np.column_stack([oof_xgb, oof_lgb, oof_ridge])
         self.meta_model_ = LogisticRegression(C=1.0, random_state=42, max_iter=500)

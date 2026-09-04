@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Tuple, List, Dict
-
 from src.utils.logger import setup_logger
 # INITIALIZATION
 logger = setup_logger("DataValidation")
@@ -13,7 +12,11 @@ def handle_ticker_changes() -> Tuple[Dict[str, str], List[str]]:
     return TICKER_CHANGES, DELISTED_TICKERS
 
 
-def validate_and_clean_tickers(df: pd.DataFrame, tickers_list: List[str], max_days_stale: int = 30) -> Tuple[pd.DataFrame, List[str], Dict[str, List]]:
+def validate_and_clean_tickers(
+    df: pd.DataFrame,
+    tickers_list: List[str],
+    max_days_stale: int = 30
+) -> Tuple[pd.DataFrame, List[str], Dict[str, List]]:
     """Validates data quality, removing stale or invalid tickers (Optimized Version)."""
     logger.info("Validating ticker data integrity...")
     alerts = {'delisted': [], 'stale': [], 'missing': [], 'warnings': []}
@@ -42,4 +45,3 @@ def validate_and_clean_tickers(df: pd.DataFrame, tickers_list: List[str], max_da
     valid_tickers = df.index.get_level_values('ticker').unique().tolist()
     logger.info(f"Valid Tickers: {len(valid_tickers)} / {len(tickers_list)}")
     return df, valid_tickers, alerts
-

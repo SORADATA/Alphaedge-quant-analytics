@@ -12,7 +12,6 @@ from pathlib import Path
 import time
 import pandas as pd
 import yfinance as yf
-
 from src.utils.logger import setup_logger
 
 logger = setup_logger("market_utils")

@@ -50,6 +50,7 @@ def get_ticker_names(market: str, base_dir: Path) -> dict:
     logger.warning(f"Aucune config trouvée pour le marché '{market}'")
     return {}
 
+
 def apply_ticker_names(df: pd.DataFrame, ticker_names: dict, ticker_col: str = "Ticker", name_col: str = "Name") -> pd.DataFrame:
     """
     Ajoute une colonne `name_col` juste après `ticker_col` avec le nom complet

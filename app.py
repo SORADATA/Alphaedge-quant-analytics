@@ -3,7 +3,6 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime, timedelta
-
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -15,8 +14,6 @@ import yfinance as yf
 import mlflow
 from mlflow.tracking import MlflowClient
 from mlflow.exceptions import MlflowException
-
-
 # =============================================================================
 # IMPORTS DES MODULES UTILITAIRES ET DATA
 # =============================================================================

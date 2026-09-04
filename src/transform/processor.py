@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Tuple, List
-
 from const import VARS_TO_LAG, RESAMPLE_MEAN_COLS, RESAMPLE_LAST_EXCLUDE
 from src.features.alpha_features import (
     compute_technical_indicators,

@@ -3,10 +3,8 @@ import json
 import warnings
 from pathlib import Path
 from datetime import datetime, timezone
-
 import pandas as pd
 from huggingface_hub import HfApi, hf_hub_download
-
 from src.utils.logger import setup_logger
 from src.pipeline.etl import get_data_pipeline
 from src.pipeline.backtest import (
@@ -105,7 +103,9 @@ def run_pipeline(market_config: dict) -> None:
             raise ValueError(f"Pas de données sur les {BACKTEST_YEARS} dernières années.")
 
         last_session = df_daily_bt.index.get_level_values("date").max()
-        logger.info(f"Dernière séance récupérée : {last_session.date()} | Backtest window : {cutoff.date()} -> aujourd'hui")
+        logger.info(
+            f"Dernière séance récupérée : {last_session.date()} | Backtest window : {cutoff.date()} -> aujourd'hui"
+            )
 
         base_dir = Path(f"data/processed/{market_name}")
         base_dir.mkdir(parents=True, exist_ok=True)
