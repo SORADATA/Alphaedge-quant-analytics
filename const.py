@@ -17,8 +17,8 @@ TRADING_DAYS_YEAR: int = 252
 RISK_FREE_RATE:    float = 0.03
 
 TARGET_CLUSTER:  int = 3
-PROBA_THRESHOLD: float = 0.51
-PROBA_MIN:       float = 0.50
+PROBA_THRESHOLD: float = 0.55  # Seuil de probabilité
+PROBA_MIN:       float = 0.50  # Position HOLD
 
 
 # MANAGEMENT COST
