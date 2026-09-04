@@ -4,6 +4,7 @@ import warnings
 from pathlib import Path
 from datetime import datetime, timezone
 import pandas as pd
+import yaml
 from huggingface_hub import HfApi, hf_hub_download
 from src.utils.logger import setup_logger
 from src.pipeline.etl import get_data_pipeline
@@ -25,7 +26,11 @@ HF_REPO_ID = os.getenv("HF_REPO_ID", "soradata/alphaedge-data")
 hf_api = HfApi()
 
 
-def upload_to_hf(local_path: Path, hf_filename: str, market_name: str) -> bool:
+def upload_to_hf(
+    local_path: Path,
+    hf_filename: str,
+    market_name: str
+) -> bool:
     """Upload vers le repo Hugging Face, sous data/{market_name}/{hf_filename}."""
     if not HF_TOKEN:
         return False
@@ -43,7 +48,10 @@ def upload_to_hf(local_path: Path, hf_filename: str, market_name: str) -> bool:
         return False
 
 
-def load_rebalance_history_from_hf(market_name: str, local_fallback: Path) -> pd.DataFrame:
+def load_rebalance_history_from_hf(
+    market_name: str,
+    local_fallback: Path
+) -> pd.DataFrame:
     """
     Récupère l'historique de rebalancing existant (source de vérité pour
     savoir si un nouveau rebalancing mensuel doit être déclenché).
@@ -183,7 +191,9 @@ def run_pipeline(market_config: dict) -> None:
         else:
             logger.info("Synchronisation Hugging Face terminée avec succès.")
 
-        logger.info(f"Pipeline terminé | Sharpe: {metrics.get('Sharpe', 'N/A')} | Signaux BUY: {metadata['n_buy_signals']}/{metadata['n_signals']}")
+        logger.info(
+            f"Pipeline terminé | Sharpe: {metrics.get('Sharpe', 'N/A')} | Signaux BUY: {metadata['n_buy_signals']}/{metadata['n_signals']}"
+            )
 
     except Exception as e:
         logger.critical(f"CRITICAL FAILURE {market_name}: {e}", exc_info=True)
@@ -197,9 +207,14 @@ if __name__ == "__main__":
     config_dir = Path("config/markets")
     failures = []
 
-    for config_file in sorted(config_dir.glob("*.json")):
-        with open(config_file) as f:
-            market_config = json.load(f)
+    # Capture à la fois les extensions .yml et .yaml
+    config_files = list(config_dir.glob("*.yml")) + list(config_dir.glob("*.yaml"))
+
+    for config_file in sorted(config_files):
+        # L'encodage utf-8 est obligatoire pour lire les emojis (ex: 🇹🇼) et les accents
+        with open(config_file, encoding="utf-8") as f:
+            market_config = yaml.safe_load(f)
+
         market = market_config.get("market_name", config_file.stem)
         try:
             run_pipeline(market_config)
