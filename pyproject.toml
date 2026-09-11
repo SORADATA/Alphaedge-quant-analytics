@@ -2,12 +2,11 @@
 name = "alphaedge"
 version = "1.0.0"
 description = "Quantitative finance and portfolio optimization application"
-# On garde la restriction Python 3.10-3.12 pour éviter les casses avec les librairies ML (comme scipy ou numba sous le capot)
-requires-python = ">=3.10,<=3.12" 
+requires-python = ">=3.11,<=3.12"
 
 dependencies = [
     # Data manipulation
-    "pandas>=2.2.0,<3.0.0",
+    "pandas>=3.0.5,<3.1.0",
     "numpy>=1.26.0",
     "PyYAML==6.0.3",
 
