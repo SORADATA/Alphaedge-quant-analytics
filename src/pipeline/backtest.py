@@ -158,7 +158,9 @@ def _simulate_period(allocation, drifted_allocation, trading_days, daily_returns
     fee_daily_factor = (1.0 - MANAGEMENT_FEE_ANNUAL / 252)
     strategy_values = strategy_values * np.cumprod([fee_daily_factor] * len(strategy_values))
 
-    bench_values = benchmark_value * np.cumprod(1.0 + benchmark_returns.reindex(trading_days).fillna(0.0))
+    bench_values = benchmark_value * np.cumprod(
+        1.0 + benchmark_returns.reindex(trading_days).fillna(0.0).to_numpy()
+        )
 
     final_total = float(strategy_values[-1])
     new_drifted = dict(zip(tickers, (portfolio_value * weights * growth[-1, :] / final_total)))
