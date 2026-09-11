@@ -16,35 +16,30 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    # On aligne la version Python avec daily_run (3.11)
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
+    - name: ⚡ Installer uv
+      uses: astral-sh/setup-uv@v3
       with:
-        python-version: "3.14"
-        cache: 'pip'
+        enable-cache: true
+        cache-dependency-glob: "pyproject.toml"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest
-        pip install -r requirements.txt
-        
+    - name: 🐍 Configurer Python 3.12
+      run: uv python install 3.12
 
+    - name: 📦 Install dependencies
+      run: uv sync --all-groups
         
     - name: Lint with flake8
       run: |
         # Arrête le build s'il y a de grosses erreurs de syntaxe
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # Affiche juste des avertissements pour le style (longueur de ligne, etc.)
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
-    # Cette étape en conditionnel "continue-on-error" 
+        uv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
   
     - name: Test with pytest
       continue-on-error: true 
       run: |
         if [ -d "tests" ]; then
-          pytest
+          uv run pytest
         else
           echo "⚠️ Pas de dossier 'tests' trouvé. Skipping tests."
         fi
