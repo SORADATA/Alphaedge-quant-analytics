@@ -1,7 +1,7 @@
 # Data manipulation
 pandas>=2.2.0,<3.0.0
 numpy>=1.26.0
-PyYAML==6.0.1
+PyYAML==6.0.3
 
 # Data collection
 yfinance>=0.2.32
