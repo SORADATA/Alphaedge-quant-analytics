@@ -1,7 +1,10 @@
 {
   "branches": [
     "main",
-    "pre-release"
+    {
+      "name": "pre-release",
+      "prerelease": "beta"
+    }
   ],
   "plugins": [
     [
