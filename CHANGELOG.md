@@ -1,3 +1,16 @@
+## 1.17.0 (2026-09-11)
+
+* Merge branch 'main' into fix/alphaedge ([8f4ceeb](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/8f4ceeb))
+* Merge pull request #31 from SORADATA/renovate/mcr.microsoft.com-devcontainers-python-3.x ([ecc4c0e](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/ecc4c0e)), closes [#31](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/31)
+* Merge pull request #32 from SORADATA/fix/alphaedge ([a006ec2](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/a006ec2)), closes [#32](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/32)
+* Update Python version requirement to 3.11 ([dd3ce1e](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/dd3ce1e))
+* chore: resync uv.lock avec pandas 3.0.x ([2e02bf7](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/2e02bf7))
+* chore(deps): update mcr.microsoft.com/devcontainers/python docker tag to v3 ([35cff88](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/35cff88))
+* fix: bench_values as ndarray to avoid KeyError on positional indexing ([7fba1a0](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/7fba1a0))
+* fix: resync uv.lock avec pandas<3.0.0 ([72da7e7](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/72da7e7))
+* feat: add pyproject for dependancies ([ba7277b](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/ba7277b))
+* feat: update dependancies with pyproject ([f46a7da](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/f46a7da))
+
 ## 1.16.0 (2026-09-11)
 
 * add pyyaml v ([cb9a495](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/cb9a495))
