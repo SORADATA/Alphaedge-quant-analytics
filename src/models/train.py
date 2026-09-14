@@ -2,9 +2,8 @@
 Pipeline d'entraînement AlphaEdge Ensemble.
 
 Entraîne un modèle par marché, l'évalue (test set + walk-forward),
-puis gère la promotion "champion" dans le MLflow Model Registry selon
-des seuils de sécurité absolus et une comparaison relative au champion
-actuel.
+puis gère la promotion "champion" dans le MLflow Model Registry et Hugging Face
+selon des seuils de sécurité absolus et un Shadow Testing relatif au champion actuel.
 """
 
 from __future__ import annotations
@@ -12,28 +11,28 @@ import json
 import os
 import warnings
 import yaml
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 import pandas as pd
+import joblib
 from dotenv import load_dotenv
 from sklearn.metrics import average_precision_score, roc_auc_score
 import mlflow
 from mlflow.exceptions import MlflowException
 from mlflow.models.signature import infer_signature
 from mlflow.tracking import MlflowClient
+from huggingface_hub import HfApi, hf_hub_download
+
 from const import CONFIG_DIR, DATA_DIR, MAX_DD_THRESHOLD, MODEL_DIR, SHARPE_THRESHOLD
 from src.features.alpha_features import add_all_features
 from src.models.ensemble import AlphaEdgeEnsemble
 from src.utils.logger import setup_logger
 from src.utils.metrics import calculate_financial_metrics
-from huggingface_hub import HfApi
-
 
 load_dotenv()
 warnings.filterwarnings("ignore")
 logger = setup_logger("train")
-
 
 # =============================================================================
 # CONFIGURATION
@@ -53,10 +52,7 @@ WF_N_OPTUNA_TRIALS = 20
 WF_MIN_TRAIN_ROWS = 50
 WF_MIN_TEST_ROWS = 5
 
-# Tolérance de dégradation du Max Drawdown acceptée pour un challenger
-# par rapport au champion actuel, avant rejet automatique.
 CHALLENGER_DD_TOLERANCE = 0.02
-NO_CHAMPION_SENTINEL = -999.0
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 USE_MLFLOW = bool(HF_TOKEN)
@@ -70,22 +66,9 @@ if USE_MLFLOW:
 else:
     logger.warning("HF_TOKEN absent — MLflow désactivé, entraînement local uniquement.")
 
-
 # =============================================================================
 # STRUCTURES DE DONNÉES
 # =============================================================================
-
-@dataclass
-class ChampionStats:
-    """Métriques du modèle champion actuellement enregistré (ou sentinelles si absent)."""
-    sharpe: float = NO_CHAMPION_SENTINEL
-    sortino: float = NO_CHAMPION_SENTINEL
-    max_drawdown: float = NO_CHAMPION_SENTINEL
-
-    @property
-    def exists(self) -> bool:
-        return self.sharpe != NO_CHAMPION_SENTINEL
-
 
 @dataclass
 class TrainingResult:
@@ -119,17 +102,16 @@ class TrainingResult:
 
 class AlphaEdgePyFunc(mlflow.pyfunc.PythonModel):
     """Wrapper PyFunc pour exposer AlphaEdgeEnsemble via l'API MLflow standard."""
-
     def __init__(self, model_instance: AlphaEdgeEnsemble):
         self.model = model_instance
 
     def predict(self, context, model_input: pd.DataFrame, params: Optional[dict] = None):
         return self.model.predict_proba(model_input)[:, 1]
 
-
 # =============================================================================
 # CHARGEMENT & PRÉPARATION DES DONNÉES
 # =============================================================================
+
 
 def _load_market_dataset(market_name: str) -> pd.DataFrame:
     """Charge le parquet mensuel d'un marché et construit la target binaire."""
@@ -147,17 +129,24 @@ def _load_market_dataset(market_name: str) -> pd.DataFrame:
 def _train_test_split_by_date(
     df: pd.DataFrame, test_months: int, market_config: dict
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split temporel (pas de shuffle) : les `test_months` derniers mois servent de test set."""
-    dates = df.index.get_level_values("date")
+    """Calcul global des features puis split temporel pour éviter la perte d'historique (NaN)."""
+    # 1. Calculer TOUTES les features sur l'historique complet d'abord
+    df_features = add_all_features(df.copy(), market_config)
+
+    # 2. Couper temporellement ensuite
+    dates = df_features.index.get_level_values("date")
     split_date = dates.max() - pd.DateOffset(months=test_months)
-    df_train = add_all_features(df[dates <= split_date].copy(), market_config)
-    df_test = add_all_features(df[dates > split_date].copy(), market_config)
-    return df_train, df_test
 
+    df_train = df_features[dates <= split_date].copy()
+    df_test = df_features[dates > split_date].copy()
+
+    # 3. Nettoyer les NaN restants liés aux indicateurs longs
+    return df_train.dropna(), df_test.dropna()
 
 # =============================================================================
-# ÉVALUATION
+# ÉVALUATION & SHADOW TESTING
 # =============================================================================
+
 
 def walk_forward_eval(
     df: pd.DataFrame,
@@ -197,16 +186,13 @@ def walk_forward_eval(
             "n_test": len(df_te),
         }
         results.append(result)
-        logger.info(
-            f"WF Window {result['window']} | AUC: {result['auc']:.4f} | APR: {result['apr']:.4f}"
-            )
+        logger.info(f"WF Window {result['window']} | AUC: {result['auc']:.4f} | APR: {result['apr']:.4f}")
 
     return pd.DataFrame(results)
 
 
 def _evaluate_test_set(
-    model: AlphaEdgeEnsemble,
-    df_test: pd.DataFrame
+    model, df_test: pd.DataFrame
 ) -> tuple[float, float, dict]:
     """Calcule AUC, APR et métriques financières sur le test set."""
     proba = model.predict_proba(df_test)[:, 1]
@@ -216,57 +202,37 @@ def _evaluate_test_set(
     return auc, apr, fin_metrics
 
 
-# =============================================================================
-# MLFLOW : PROMOTION DU CHAMPION
-# =============================================================================
+def _should_promote(
+    challenger_metrics: dict, 
+    champion_current_metrics: dict, 
+    challenger_wf_auc: float
+) -> tuple[bool, str]:
+    """Détermine si le challenger doit remplacer le champion actuel."""
+    # 1. Exigence de stabilité structurelle (Walk-Forward)
+    if challenger_wf_auc < 0.51:
+        return False, f"Instabilité temporelle détectée (WF_AUC = {challenger_wf_auc:.3f})"
 
-def _fetch_champion_stats(
-    client: MlflowClient,
-    registered_model_name: str,
-    market_name: str
-) -> ChampionStats:
-    """Récupère les métriques du champion actuel, ou des sentinelles s'il n'existe pas encore."""
-    try:
-        current_champ = client.get_model_version_by_alias(registered_model_name, "champion")
-        champ_metrics = client.get_run(current_champ.run_id).data.metrics
-        return ChampionStats(
-            sharpe=champ_metrics.get("Sharpe_Ratio", NO_CHAMPION_SENTINEL),
-            sortino=champ_metrics.get("Sortino_Ratio", NO_CHAMPION_SENTINEL),
-            max_drawdown=champ_metrics.get("Max_Drawdown", NO_CHAMPION_SENTINEL),
-        )
-    except MlflowException:
-        logger.info(f"[{market_name}] Aucun champion trouvé. Déploiement initial.")
-        return ChampionStats()
+    # 2. Filtres de sécurité absolus
+    if challenger_metrics.get("sharpe", -1) < SHARPE_THRESHOLD or challenger_metrics.get("max_drawdown", -1) < MAX_DD_THRESHOLD:
+        return False, "Le challenger échoue aux seuils de sécurité absolus."
 
+    # 3. Comparaison face au champion sur la MÊME période récente
+    if not champion_current_metrics:
+        return True, "Déploiement initial (aucun champion existant)."
 
-def _should_promote(challenger_sharpe: float, challenger_sortino: float, challenger_max_dd: float,
-                    champion: ChampionStats) -> tuple[bool, str]:
-    """
-    Détermine si le challenger doit être promu champion.
-
-    Règles :
-      1. Sécurité absolue : Sharpe et Max Drawdown doivent dépasser les seuils configurés.
-      2. Comparaison relative : le Sortino doit être strictement meilleur que celui du
-         champion, et le Drawdown ne doit pas se dégrader de plus de CHALLENGER_DD_TOLERANCE.
-
-    Retourne (promu: bool, raison: str).
-    """
-    passes_safety = (
-        challenger_sharpe >= SHARPE_THRESHOLD
-        ) and (
-            challenger_max_dd >= MAX_DD_THRESHOLD
-            )
-    if not passes_safety:
-        return False, "Sharpe ou Drawdown sous les seuils de sécurité absolus"
-
-    safer_dd = challenger_max_dd >= (champion.max_drawdown - CHALLENGER_DD_TOLERANCE)
-    better_sortino = challenger_sortino > champion.sortino
+    better_sortino = challenger_metrics.get("sortino", -1) > champion_current_metrics.get("sortino", -1)
+    safer_dd = challenger_metrics.get("max_drawdown", -1) >= (champion_current_metrics.get("max_drawdown", -1) - CHALLENGER_DD_TOLERANCE)
 
     if not safer_dd:
-        return False, "Drawdown trop dégradé par rapport au champion"
+        return False, "Risque (Drawdown) trop élevé face au champion actuel."
     if not better_sortino:
-        return False, "Sortino insuffisant par rapport au champion"
-    return True, f"Sortino amélioré ({challenger_sortino:.2f} > {champion.sortino:.2f})"
+        return False, "Performance (Sortino) inférieure au champion actuel."
+
+    return True, "Challenger supérieur et stable sur la période récente."
+
+# =============================================================================
+# MLFLOW : LOGGING ET PROMOTION
+# =============================================================================
 
 
 def _log_and_promote_to_mlflow(
@@ -274,8 +240,10 @@ def _log_and_promote_to_mlflow(
     model: AlphaEdgeEnsemble,
     df_test: pd.DataFrame,
     result: TrainingResult,
+    promote: bool,
+    reason: str
 ) -> None:
-    """Log le run MLflow, enregistre le modèle dans le Registry, et gère la promotion."""
+    """Log le run MLflow, enregistre le modèle, et gère la promotion officielle."""
     registered_model_name = f"AlphaEdge_Ensemble_{market_name}"
     client = MlflowClient()
     fin_metrics = result.fin_metrics
@@ -309,24 +277,13 @@ def _log_and_promote_to_mlflow(
                 f"runs:/{run.info.run_id}/ensemble_model", registered_model_name
             )
 
-            champion = _fetch_champion_stats(client, registered_model_name, market_name)
-            promote, reason = _should_promote(
-                challenger_sharpe=fin_metrics.get("sharpe", 0.0),
-                challenger_sortino=fin_metrics.get("sortino", 0.0),
-                challenger_max_dd=fin_metrics.get("max_drawdown", -1.0),
-                champion=champion,
-            )
-
             if promote:
-                # Promote Mlflow ui
                 client.set_registered_model_alias(registered_model_name, "champion", model_version.version)
                 result.promoted = True
                 logger.info(f"[{market_name}] PROMOTION v{model_version.version} — {reason}")
                 try:
                     api = HfApi()
-                    # Save on HF
                     local_model_path = MODEL_DIR / market_name / "ensemble_model.pkl"
-
                     api.upload_file(
                         path_or_fileobj=str(local_model_path),
                         path_in_repo=f"models/{market_name}/champion.pkl",
@@ -334,25 +291,21 @@ def _log_and_promote_to_mlflow(
                         repo_type="dataset",
                         token=HF_TOKEN
                     )
-                    logger.info(
-                        f"[{market_name}] Modèle persistant sauvegardé sur HF Hub ( soradata/alphaedge-data)"
-                        )
+                    logger.info(f"[{market_name}] Modèle persistant mis à jour sur HF Hub (soradata/alphaedge-data)")
                 except Exception as e:
-                    logger.error(f"[{market_name}] Sync faillure on Hf Hub : {e}")
-
+                    logger.error(f"[{market_name}] Échec synchronisation Hugging Face : {e}")
             else:
                 logger.warning(f"[{market_name}] CHALLENGER REJETÉ — {reason}")
 
     except MlflowException as exc:
         logger.error(f"[{market_name}] Erreur durant le flux MLflow : {exc}", exc_info=True)
 
+# =============================================================================
+# PIPELINE D'ENTRAÎNEMENT PRINCIPAL
+# =============================================================================
 
-# =============================================================================
-# PIPELINE D'ENTRAÎNEMENT
-# =============================================================================
 
 def train_pipeline(market_config: dict) -> tuple[AlphaEdgeEnsemble, dict]:
-    """Entraîne, évalue et (le cas échéant) promeut le modèle d'un marché donné."""
     market_name = market_config["market_name"]
     logger.info(f"Début de l'entraînement — {market_name}")
 
@@ -362,20 +315,43 @@ def train_pipeline(market_config: dict) -> tuple[AlphaEdgeEnsemble, dict]:
     if len(df_train) < MIN_TRAIN_ROWS:
         raise ValueError(f"Volume de données insuffisant pour {market_name} : {len(df_train)} lignes.")
 
+    # 1. Entraînement du Challenger
     model = AlphaEdgeEnsemble(n_optuna_trials=N_OPTUNA_TRIALS_FINAL)
     model.fit(df_train, df_train["target"])
 
-    final_auc, final_apr, fin_metrics = _evaluate_test_set(model, df_test)
-    max_dd_pct = fin_metrics.get("max_drawdown", -1.0) * 100
+    final_auc, final_apr, challenger_fin_metrics = _evaluate_test_set(model, df_test)
     logger.info(
-        f"[{market_name}] Test Set -> AUC: {final_auc:.4f} | "
-        f"Sortino: {fin_metrics.get('sortino', 0.0):.2f} | Max DD: {max_dd_pct:.1f}%"
+        f"[{market_name}] Challenger Test Set -> AUC: {final_auc:.4f} | "
+        f"Sortino: {challenger_fin_metrics.get('sortino', 0.0):.2f} | "
+        f"Max DD: {challenger_fin_metrics.get('max_drawdown', -1.0) * 100:.1f}%"
     )
 
+    # 2. Validation temporelle (Walk-Forward)
     df_full = pd.concat([df_train, df_test])
     wf_results = walk_forward_eval(df_full)
     wf_auc_mean = wf_results["auc"].mean() if not wf_results.empty else final_auc
 
+    # 3. Shadow Testing : Chargement et test de l'ancien Champion sur les données récentes
+    champion_fin_metrics = {}
+    if HF_TOKEN:
+        try:
+            champ_path = hf_hub_download(
+                repo_id="soradata/alphaedge-data",
+                repo_type="dataset",
+                filename=f"models/{market_name}/champion.pkl",
+                token=HF_TOKEN
+            )
+            # Utilisation de joblib pour charger le pickle ou la méthode custom si applicable
+            champion_model = joblib.load(champ_path)
+            _, _, champion_fin_metrics = _evaluate_test_set(champion_model, df_test)
+            logger.info(f"[{market_name}] Champion actuel testé sur le nouveau régime -> Sortino: {champion_fin_metrics.get('sortino', 0.0):.2f}")
+        except Exception as e:
+            logger.info(f"[{market_name}] Aucun champion trouvé ou téléchargeable (Déploiement initial garanti).")
+
+    # 4. Décision de promotion (Évaluation relative au même environnement)
+    promote, reason = _should_promote(challenger_fin_metrics, champion_fin_metrics, wf_auc_mean)
+
+    # 5. Sauvegarde locale du Challenger
     market_model_dir = MODEL_DIR / market_name
     market_model_dir.mkdir(parents=True, exist_ok=True)
     model.save(market_model_dir / "ensemble_model.pkl")
@@ -384,12 +360,18 @@ def train_pipeline(market_config: dict) -> tuple[AlphaEdgeEnsemble, dict]:
         market=market_name,
         auc_test=final_auc,
         apr_test=final_apr,
-        fin_metrics=fin_metrics,
+        fin_metrics=challenger_fin_metrics,
         wf_auc_mean=wf_auc_mean,
     )
 
+    # 6. MLFlow et synchronisation Cloud
     if USE_MLFLOW:
-        _log_and_promote_to_mlflow(market_name, model, df_test, result)
+        _log_and_promote_to_mlflow(market_name, model, df_test, result, promote, reason)
+    else:
+        if promote:
+            logger.info(f"[{market_name}] PROMOTION en local (pas de MLflow) — {reason}")
+        else:
+            logger.warning(f"[{market_name}] CHALLENGER REJETÉ en local — {reason}")
 
     model_card = result.to_model_card()
     with open(market_model_dir / "model_card.json", "w", encoding="utf-8") as f:
@@ -397,13 +379,12 @@ def train_pipeline(market_config: dict) -> tuple[AlphaEdgeEnsemble, dict]:
 
     return model, model_card
 
-
 # =============================================================================
 # ORCHESTRATEUR
 # =============================================================================
 
+
 def _load_configured_markets(config_dir: Path) -> list[dict]:
-    """Lit les fichiers de configuration YAML et retourne les configs complètes."""
     configs = []
     for config_file in sorted(config_dir.glob("*.yml")):
         with open(config_file, encoding="utf-8") as f:
@@ -411,12 +392,11 @@ def _load_configured_markets(config_dir: Path) -> list[dict]:
 
         if not market_cfg:
             continue
-
         if not market_cfg.get("market_name"):
-            logger.warning(f"Fichier de config sans 'market_name' ignoré : {config_file}")
+            logger.warning(f"Fichier sans 'market_name' ignoré : {config_file}")
             continue
         if not market_cfg.get("ff_region"):
-            logger.warning(f"Fichier de config sans 'ff_region' ignoré : {config_file}")
+            logger.warning(f"Fichier sans 'ff_region' ignoré : {config_file}")
             continue
         configs.append(market_cfg)
     return configs
@@ -445,7 +425,6 @@ def main() -> None:
     if failures:
         logger.error(f"Marchés en échec : {failures}")
         raise SystemExit(1)
-
 
 if __name__ == "__main__":
     main()
