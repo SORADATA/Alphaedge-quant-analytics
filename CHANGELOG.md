@@ -1,3 +1,8 @@
+## <small>1.17.1 (2026-09-14)</small>
+
+* Merge pull request #34 from SORADATA/fix/alphaedge ([9c41fb0](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/9c41fb0)), closes [#34](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/34)
+* fix: instability of models by adding temporality control ([9588781](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/9588781))
+
 ## 1.17.0 (2026-09-11)
 
 * Merge branch 'main' into fix/alphaedge ([8f4ceeb](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/8f4ceeb))
