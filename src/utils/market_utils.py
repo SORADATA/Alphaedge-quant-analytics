@@ -1,4 +1,3 @@
-
 """
 Market Utils
 =============
@@ -8,10 +7,13 @@ Fonctions :
   - get_benchmark_returns() : télécharge et reindex les rendements du benchmark
   - build_export_df()       : formate le snapshot journalier pour l'export HF
 """
-from pathlib import Path
+
 import time
+from pathlib import Path
+
 import pandas as pd
 import yfinance as yf
+
 from src.utils.logger import setup_logger
 
 logger = setup_logger("market_utils")
@@ -23,6 +25,7 @@ _BENCHMARK_RETRY_WAIT = 5
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+
 
 def _strip_timezone(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """
@@ -38,6 +41,7 @@ def _strip_timezone(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
 # ══════════════════════════════════════════════════════════════════
 # BENCHMARK
 # ══════════════════════════════════════════════════════════════════
+
 
 def get_benchmark_returns(
     benchmark_ticker: str,
@@ -88,18 +92,18 @@ def get_benchmark_returns(
 
             # Extraction du prix de clôture
             if isinstance(raw.columns, pd.MultiIndex):
-                prices = raw["Adj Close"].iloc[:, 0]   # Adj Close > Close pour benchmark
+                prices = raw["Adj Close"].iloc[:, 0]  # Adj Close > Close pour benchmark
             else:
-                prices = raw["Adj Close"] if "Adj Close" in raw.columns else raw["Close"]
+                prices = (
+                    raw["Adj Close"] if "Adj Close" in raw.columns else raw["Close"]
+                )
 
             # Normalisation timezone
             prices.index = _strip_timezone(prices.index)
 
             # Rendements journaliers reindexés sur le calendrier stratégie
             bench_returns = (
-                prices.pct_change()
-                .reindex(reindex_clean, method="ffill")
-                .fillna(0.0)
+                prices.pct_change().reindex(reindex_clean, method="ffill").fillna(0.0)
             )
 
             logger.info(
@@ -128,6 +132,7 @@ def get_benchmark_returns(
 # ══════════════════════════════════════════════════════════════════
 # EXPORT DES SIGNAUX
 # ══════════════════════════════════════════════════════════════════
+
 
 def build_export_df(
     today_data: pd.DataFrame,
@@ -168,11 +173,7 @@ def build_export_df(
     if cluster_col in df.columns:
         cols_to_keep.append(cluster_col)
 
-    export = (
-        df[cols_to_keep]
-        .reset_index()
-        .rename(columns={"ticker": "Ticker"})
-    )
+    export = df[cols_to_keep].reset_index().rename(columns={"ticker": "Ticker"})
 
     # Renommage dynamique
     rename_map = {"proba_upside": "Proba_Hausse (%)"}
@@ -199,9 +200,12 @@ def build_export_df(
     )
 
     # Tri par probabilité décroissante
-    export = export.sort_values("Proba_Hausse (%)", ascending=False).reset_index(drop=True)
+    export = export.sort_values("Proba_Hausse (%)", ascending=False).reset_index(
+        drop=True
+    )
 
     return export
+
 
 # ══════════════════════════════════════════════════════════════════
 # DONNÉES TEMPS RÉEL (Data Explorer)
@@ -230,7 +234,9 @@ def get_live_ticker_data(ticker: str, period: str = "1y") -> pd.DataFrame:
             logger.warning(f"Réponse vide pour {ticker} (tentative {attempt}/3)")
             time.sleep(2)
         except Exception as e:
-            logger.warning(f"Erreur téléchargement {ticker} (tentative {attempt}/3) : {e}")
+            logger.warning(
+                f"Erreur téléchargement {ticker} (tentative {attempt}/3) : {e}"
+            )
             time.sleep(2)
 
     logger.error(f"Impossible de charger {ticker} après 3 tentatives.")
@@ -241,11 +247,12 @@ def get_live_ticker_data(ticker: str, period: str = "1y") -> pd.DataFrame:
 # DÉCOUVERTE DES MARCHÉS DISPONIBLES
 # ══════════════════════════════════════════════════════════════════
 
+
 def discover_markets(
     repo_id: str,
-    token: str = None,
-    local_dir: Path = None,
-    fallback: list = None,
+    token: str | None = None,
+    local_dir: Path | None = None,
+    fallback: list | None = None,
 ) -> list:
     """
     Découvre les marchés disponibles en interrogeant le repo HF distant
@@ -254,12 +261,16 @@ def discover_markets(
     """
     try:
         from huggingface_hub import HfApi
+
         api = HfApi()
         files = api.list_repo_files(repo_id=repo_id, repo_type="dataset", token=token)
-        markets = sorted({
-            f.split("/")[1] for f in files
-            if f.startswith("data/") and len(f.split("/")) > 2
-        })
+        markets = sorted(
+            {
+                f.split("/")[1]
+                for f in files
+                if f.startswith("data/") and len(f.split("/")) > 2
+            }
+        )
         if markets:
             return markets
     except Exception as e:
@@ -277,26 +288,26 @@ def discover_markets(
 # DEVISE PAR TICKER (suffixe yfinance -> devise / symbole)
 # ══════════════════════════════════════════════════════════════════
 _SUFFIX_CURRENCY_MAP = {
-    "":      ("USD", "$"),      # pas de suffixe = US (AAPL, TSLA...)
-    ".PA":   ("EUR", "€"),      # Paris
-    ".DE":   ("EUR", "€"),      # Francfort
-    ".AS":   ("EUR", "€"),      # Amsterdam
-    ".MI":   ("EUR", "€"),      # Milan
-    ".KS":   ("KRW", "₩"),      # Corée (KOSPI)
-    ".KQ":   ("KRW", "₩"),      # Corée (KOSDAQ)
-    ".HK":   ("HKD", "HK$"),    # Hong Kong
-    ".SS":   ("CNY", "¥"),      # Shanghai
-    ".SZ":   ("CNY", "¥"),      # Shenzhen
-    ".NS":   ("INR", "₹"),      # Inde (NSE)
-    ".BO":   ("INR", "₹"),      # Inde (BSE)
-    ".SA":   ("BRL", "R$"),     # Brésil
-    ".IS":   ("TRY", "₺"),      # Turquie
-    ".JO":   ("ZAR", "R"),      # Afrique du Sud
-    ".MX":   ("MXN", "MX$"),    # Mexique
-    ".TW":   ("TWD", "NT$"),    # Taïwan
-    ".TWO":  ("TWD", "NT$"),    # Taïwan (OTC)
-    ".KL":   ("MYR", "RM"),     # Malaisie
-    ".BK":   ("THB", "฿"),      # Thaïlande
+    "": ("USD", "$"),  # pas de suffixe = US (AAPL, TSLA...)
+    ".PA": ("EUR", "€"),  # Paris
+    ".DE": ("EUR", "€"),  # Francfort
+    ".AS": ("EUR", "€"),  # Amsterdam
+    ".MI": ("EUR", "€"),  # Milan
+    ".KS": ("KRW", "₩"),  # Corée (KOSPI)
+    ".KQ": ("KRW", "₩"),  # Corée (KOSDAQ)
+    ".HK": ("HKD", "HK$"),  # Hong Kong
+    ".SS": ("CNY", "¥"),  # Shanghai
+    ".SZ": ("CNY", "¥"),  # Shenzhen
+    ".NS": ("INR", "₹"),  # Inde (NSE)
+    ".BO": ("INR", "₹"),  # Inde (BSE)
+    ".SA": ("BRL", "R$"),  # Brésil
+    ".IS": ("TRY", "₺"),  # Turquie
+    ".JO": ("ZAR", "R"),  # Afrique du Sud
+    ".MX": ("MXN", "MX$"),  # Mexique
+    ".TW": ("TWD", "NT$"),  # Taïwan
+    ".TWO": ("TWD", "NT$"),  # Taïwan (OTC)
+    ".KL": ("MYR", "RM"),  # Malaisie
+    ".BK": ("THB", "฿"),  # Thaïlande
 }
 
 
@@ -318,7 +329,8 @@ def get_ticker_currency(ticker: str, default: tuple = ("EUR", "€")) -> tuple:
         suffix = "." + ticker.split(".")[-1]
         if suffix in _SUFFIX_CURRENCY_MAP:
             return _SUFFIX_CURRENCY_MAP[suffix]
-        logger.warning(f"Suffixe inconnu pour {ticker} ({suffix}), devise par defaut utilisée")
+        logger.warning(
+            f"Suffixe inconnu pour {ticker} ({suffix}), devise par defaut utilisée"
+        )
         return default
     return _SUFFIX_CURRENCY_MAP[""]
-

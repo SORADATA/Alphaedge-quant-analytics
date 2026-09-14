@@ -9,13 +9,15 @@ Stratégie :
   - Retry automatique (3 tentatives, 5s entre chaque)
   - Validation des données avant sauvegarde
 """
-from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass, field
+
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import yfinance as yf
+
 from const import DATA_DIR
 from src.utils.logger import setup_logger
 
@@ -31,6 +33,7 @@ class MarketExtractor:
     """
     Gère uniquement le téléchargement des données boursières brutes.
     """
+
     market_name: str
     tickers: list[str]
     history_years: int = 10
@@ -51,7 +54,7 @@ class MarketExtractor:
 
     # Helpers privés
 
-    def _load_existing(self) -> Optional[pd.DataFrame]:
+    def _load_existing(self) -> pd.DataFrame | None:
         """Charge le CSV existant avec typage strict."""
         if not self.file_path.exists():
             return None
@@ -65,7 +68,9 @@ class MarketExtractor:
             )
             return df
         except Exception as e:
-            logger.warning(f"Impossible de lire le fichier existant ({e}). Full download.")
+            logger.warning(
+                f"Impossible de lire le fichier existant ({e}). Full download."
+            )
             return None
 
     def _validate_download(self, df: pd.DataFrame) -> bool:
@@ -79,15 +84,11 @@ class MarketExtractor:
         if "adj close" not in df.columns:
             logger.warning(
                 f"Colonne 'adj close' absente. Colonnes disponibles : {df.columns.tolist()}"
-                )
+            )
             return False
 
         valid_tickers = (
-            df["adj close"]
-            .unstack("ticker")
-            .dropna(how="all", axis=1)
-            .columns
-            .tolist()
+            df["adj close"].unstack("ticker").dropna(how="all", axis=1).columns.tolist()
         )
         if not valid_tickers:
             logger.warning("Tous les tickers sont entièrement NaN.")
@@ -131,7 +132,7 @@ class MarketExtractor:
 
     # Interface publique
 
-    def fetch_market_data(self) -> Optional[pd.DataFrame]:
+    def fetch_market_data(self) -> pd.DataFrame | None:
         """
         Télécharge les données brutes.
         """
@@ -139,8 +140,12 @@ class MarketExtractor:
 
         if existing_df is not None:
             last_date = existing_df.index.get_level_values("date").max()
-            start_date = (last_date - pd.Timedelta(days=_DELTA_OVERLAP_DAYS)).strftime("%Y-%m-%d")
-            logger.info(f" [{self.market_name}] Mise à jour depuis le {last_date.date()}...")
+            start_date = (last_date - pd.Timedelta(days=_DELTA_OVERLAP_DAYS)).strftime(
+                "%Y-%m-%d"
+            )
+            logger.info(
+                f" [{self.market_name}] Mise à jour depuis le {last_date.date()}..."
+            )
         else:
             start_date = (
                 datetime.today() - pd.DateOffset(days=365 * self.history_years)
@@ -163,14 +168,16 @@ class MarketExtractor:
                 if raw.empty:
                     logger.warning(
                         f"Réponse vide de YFinance (tentative {attempt}/{_DOWNLOAD_RETRIES})"
-                        )
+                    )
                     time.sleep(_DOWNLOAD_RETRY_WAIT)
                     continue
 
                 df = self._parse_yfinance(raw)
 
                 if not self._validate_download(df):
-                    logger.warning(f"Validation échouée (tentative {attempt}/{_DOWNLOAD_RETRIES})")
+                    logger.warning(
+                        f"Validation échouée (tentative {attempt}/{_DOWNLOAD_RETRIES})"
+                    )
                     time.sleep(_DOWNLOAD_RETRY_WAIT)
                     continue
 

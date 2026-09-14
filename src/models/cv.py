@@ -2,9 +2,11 @@
 PurgedTimeSeriesSplit — López de Prado (2018), Advances in Financial ML.
 Évite le leakage entre folds adjacents via purge + embargo.
 """
+
 import os
-import numpy as np
 from dataclasses import dataclass
+
+import numpy as np
 from sklearn.model_selection import BaseCrossValidator
 
 
@@ -25,13 +27,12 @@ class PurgedTimeSeriesSplit(BaseCrossValidator):
     n_splits    : nombre de folds
     embargo_pct : fraction des données utilisée comme embargo après chaque fold test
     """
+
     n_splits: int = 5
     embargo_pct: float = 0.01
 
     @classmethod
-    def from_github_actions(
-        cls
-    ) -> "PurgedTimeSeriesSplit":
+    def from_github_actions(cls) -> "PurgedTimeSeriesSplit":
         """
         Instancie la validation croisée en lisant les variables d'environnement du workflow.
         Utilise les valeurs 5 et 0.01 par défaut si rien n'est défini dans le YAML.
@@ -50,10 +51,12 @@ class PurgedTimeSeriesSplit(BaseCrossValidator):
             test_start = i * fold_size
             test_end = test_start + fold_size
             purge_start = max(0, test_start - embargo)
-            train_idx = np.concatenate([
-                np.arange(0, purge_start),
-                np.arange(min(test_end + embargo, n), n),
-            ])
+            train_idx = np.concatenate(
+                [
+                    np.arange(0, purge_start),
+                    np.arange(min(test_end + embargo, n), n),
+                ]
+            )
             test_idx = np.arange(test_start, min(test_end, n))
 
             if len(train_idx) == 0 or len(test_idx) == 0:

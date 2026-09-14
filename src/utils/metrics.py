@@ -14,15 +14,13 @@ Fonctions :
 import numpy as np
 import pandas as pd
 
-
 # ══════════════════════════════════════════════════════════════════
 # ÉVALUATION MODÈLE (walk-forward / backtest)
 # ══════════════════════════════════════════════════════════════════
 
+
 def calculate_financial_metrics(
-    df_test: pd.DataFrame,
-    probas: np.ndarray,
-    threshold: float = 0.5
+    df_test: pd.DataFrame, probas: np.ndarray, threshold: float = 0.5
 ) -> dict:
     """
     Calcule sharpe / max_drawdown / total_return à partir des probabilités
@@ -33,7 +31,7 @@ def calculate_financial_metrics(
     portfolio_returns = strategy_returns.groupby(level="date").mean()
 
     if portfolio_returns.std() == 0:
-        return {"sharpe": 0.0, "sortino": 0.0,  "max_drawdown": 0.0, "total_return": 0.0}
+        return {"sharpe": 0.0, "sortino": 0.0, "max_drawdown": 0.0, "total_return": 0.0}
 
     annualization_factor = np.sqrt(12)
     mean_ret = portfolio_returns.mean()
@@ -44,13 +42,17 @@ def calculate_financial_metrics(
     negative_returns = portfolio_returns[portfolio_returns < 0]
     downside_std = negative_returns.std() if len(negative_returns) > 0 else 0.0
     # sortino = semi-ecart-type sur les rendements négatifs only
-    sortino_ratio = (mean_ret / downside_std) * annualization_factor if downside_std != 0 else 0.0
+    sortino_ratio = (
+        (mean_ret / downside_std) * annualization_factor if downside_std != 0 else 0.0
+    )
 
     cumulative_returns = (1 + portfolio_returns).cumprod()
     rolling_max = cumulative_returns.cummax()
     drawdown = (cumulative_returns - rolling_max) / rolling_max
     max_drawdown = drawdown.min()
-    total_return = cumulative_returns.iloc[-1] - 1 if not cumulative_returns.empty else 0.0
+    total_return = (
+        cumulative_returns.iloc[-1] - 1 if not cumulative_returns.empty else 0.0
+    )
 
     return {
         "sharpe": round(sharpe_ratio, 4),
@@ -63,6 +65,7 @@ def calculate_financial_metrics(
 # ══════════════════════════════════════════════════════════════════
 # SUIVI PORTEFEUILLE PROD (dashboard)
 # ══════════════════════════════════════════════════════════════════
+
 
 def calculate_metrics(df: pd.DataFrame) -> tuple:
     """
@@ -129,7 +132,9 @@ def _compute_recovery_time(dd_series: pd.Series) -> int:
     return (dd_series.index[-1] - trough_idx).days
 
 
-def calculate_period_return(df: pd.DataFrame, days: int = None, ytd: bool = False, daily: bool = False) -> float:
+def calculate_period_return(
+    df: pd.DataFrame, days: int | None = None, ytd: bool = False, daily: bool = False
+) -> float:
     """
     Rendement de la stratégie sur une fenêtre donnée (YTD, N derniers jours,
     variation journalière, ou depuis le début si aucun paramètre n'est fourni).
@@ -152,7 +157,9 @@ def calculate_period_return(df: pd.DataFrame, days: int = None, ytd: bool = Fals
         if target_date < df.index[0]:
             start_price = df["Strategy"].iloc[0]
         else:
-            start_price = df["Strategy"].iloc[df.index.get_indexer([target_date], method="nearest")[0]]
+            start_price = df["Strategy"].iloc[
+                df.index.get_indexer([target_date], method="nearest")[0]
+            ]
 
         return ((last_price / start_price) - 1) if start_price != 0 else 0.0
     except Exception:

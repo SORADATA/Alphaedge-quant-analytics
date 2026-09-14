@@ -17,15 +17,15 @@ Notes
 
 import numpy as np
 import pandas as pd
-from ta.volatility import AverageTrueRange
 from ta.trend import MACD as MACDIndicator
+from ta.volatility import AverageTrueRange
 
-from const import ATR_WINDOW, MACD_SLOW, MACD_FAST, MACD_SIGN, MIN_HISTORY_TA
-
+from const import ATR_WINDOW, MACD_FAST, MACD_SIGN, MACD_SLOW, MIN_HISTORY_TA
 
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+
 
 def _safe_normalize(series: pd.Series) -> pd.Series:
     """
@@ -53,6 +53,7 @@ def _get_close(stock_data: pd.DataFrame) -> pd.Series:
 # ══════════════════════════════════════════════════════════════════
 # INDICATEURS TECHNIQUES
 # ══════════════════════════════════════════════════════════════════
+
 
 def compute_atr(stock_data: pd.DataFrame) -> pd.Series:
     """
@@ -144,7 +145,7 @@ def compute_garman_klass_vol(stock_data: pd.DataFrame) -> pd.Series:
     log_hl = np.log(stock_data["high"]) - np.log(stock_data["low"])
     log_co = np.log(close) - np.log(stock_data["open"])
 
-    gk = 0.5 * log_hl ** 2 - (2 * np.log(2) - 1) * log_co ** 2
+    gk = 0.5 * log_hl**2 - (2 * np.log(2) - 1) * log_co**2
 
     return gk
 

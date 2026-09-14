@@ -1,38 +1,38 @@
-import os
 import json
-import time
-from pathlib import Path
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
+
+import mlflow
 import numpy as np
 import pandas as pd
-import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 from streamlit_autorefresh import st_autorefresh
-import yfinance as yf
-import mlflow
-from mlflow.tracking import MlflowClient
-from mlflow.exceptions import MlflowException
+
+from src.extract.data_loader import load_all_data
+from src.utils.config_loader import apply_ticker_names, get_ticker_names
+
 # =============================================================================
 # IMPORTS DES MODULES UTILITAIRES ET DATA
 # =============================================================================
-from src.utils.market_utils import get_live_ticker_data, discover_markets, get_ticker_currency
-from src.utils.ui_utils import display_kpi_card, load_css
-from src.utils.metrics import calculate_metrics, calculate_period_return
+from src.utils.market_utils import (
+    discover_markets,
+    get_live_ticker_data,
+    get_ticker_currency,
+)
 from src.utils.math_utils import trim_flat_start
+from src.utils.metrics import calculate_metrics, calculate_period_return
 from src.utils.mlflow_utils import get_champion_metrics
-from src.extract.data_loader import load_all_data
-from src.utils.config_loader import get_ticker_names, apply_ticker_names
-
+from src.utils.ui_utils import display_kpi_card, load_css
 
 # =============================================================================
 # CONFIGURATION & STYLE
 # =============================================================================
 st.set_page_config(
-    page_title="AlphaEdge Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="AlphaEdge Dashboard", layout="wide", initial_sidebar_state="expanded"
 )
 
 st_autorefresh(interval=900000, key="datarefresh")
@@ -70,7 +70,9 @@ MARKET_OPTIONS = discover_markets(
 )
 
 if not MARKET_OPTIONS:
-    st.error("Aucun marché disponible : vérifiez HF_REPO_ID, HF_TOKEN, data/processed, ou config/markets.json.")
+    st.error(
+        "Aucun marché disponible : vérifiez HF_REPO_ID, HF_TOKEN, data/processed, ou config/markets.json."
+    )
     st.stop()
 
 
@@ -84,7 +86,9 @@ st.sidebar.caption("Quantitative Asset Allocation")
 selected_market = st.sidebar.selectbox("Marché", MARKET_OPTIONS, index=0)
 
 with st.spinner(f"Loading {selected_market} data..."):
-    df_hist, df_signals, df_rebalance, load_errors = load_all_data(selected_market, HF_REPO_ID)
+    df_hist, df_signals, df_rebalance, load_errors = load_all_data(
+        selected_market, HF_REPO_ID
+    )
 
 if st.sidebar.button("Force Sync Pipeline"):
     st.cache_data.clear()
@@ -95,13 +99,16 @@ st.sidebar.markdown(
 )
 
 st.sidebar.markdown("---")
-page = st.sidebar.radio("Navigation", [
-    "Dashboard",
-    "Daily Signals",
-    "Data Explorer",
-    "Model Details",
-    "Rebalance History"
-])
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "Dashboard",
+        "Daily Signals",
+        "Data Explorer",
+        "Model Details",
+        "Rebalance History",
+    ],
+)
 st.sidebar.markdown("---")
 
 if not df_hist.empty:
@@ -161,8 +168,10 @@ if page == "Dashboard":
     st.title(f"Portfolio Overview - {selected_market}")
     if not df_hist.empty:
         # Récupération des 7 valeurs renvoyées par calculate_metrics()
-        tot_ret, alpha, sharpe, sortino, max_dd, calmar, recovery_days = calculate_metrics(df_hist)
-        
+        tot_ret, alpha, sharpe, sortino, max_dd, calmar, recovery_days = (
+            calculate_metrics(df_hist)
+        )
+
         # Affichage sur 7 colonnes pour intégrer harmonieusement toutes les métriques avancées
         c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
         with c1:
@@ -178,28 +187,65 @@ if page == "Dashboard":
         with c6:
             display_kpi_card("Max Drawdown", max_dd, color_code=True)
         with c7:
-            display_kpi_card("Recovery Time", recovery_days, is_percent=False, suffix=" j", minimal=False)
+            display_kpi_card(
+                "Recovery Time",
+                recovery_days,
+                is_percent=False,
+                suffix=" j",
+                minimal=False,
+            )
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Period Performance")
         k1, k2, k3, k4, k5 = st.columns(5)
         with k1:
-            display_kpi_card("YTD", calculate_period_return(df_hist, ytd=True), color_code=True, minimal=True)
+            display_kpi_card(
+                "YTD",
+                calculate_period_return(df_hist, ytd=True),
+                color_code=True,
+                minimal=True,
+            )
         with k2:
-            display_kpi_card("6 Months", calculate_period_return(df_hist, days=180), color_code=True, minimal=True)
+            display_kpi_card(
+                "6 Months",
+                calculate_period_return(df_hist, days=180),
+                color_code=True,
+                minimal=True,
+            )
         with k3:
-            display_kpi_card("3 Months", calculate_period_return(df_hist, days=90), color_code=True, minimal=True)
+            display_kpi_card(
+                "3 Months",
+                calculate_period_return(df_hist, days=90),
+                color_code=True,
+                minimal=True,
+            )
         with k4:
-            display_kpi_card("1 Month", calculate_period_return(df_hist, days=30), color_code=True, minimal=True)
+            display_kpi_card(
+                "1 Month",
+                calculate_period_return(df_hist, days=30),
+                color_code=True,
+                minimal=True,
+            )
         with k5:
-            display_kpi_card("Daily Return", calculate_period_return(df_hist, daily=True), color_code=True, minimal=True)
+            display_kpi_card(
+                "Daily Return",
+                calculate_period_return(df_hist, daily=True),
+                color_code=True,
+                minimal=True,
+            )
 
         st.markdown("---")
         col_title, col_filter = st.columns([2, 1])
         with col_title:
             st.subheader("Strategy vs Benchmark")
         with col_filter:
-            p_sel = st.radio("Zoom:", ["1M", "3M", "6M", "YTD", "1Y", "ALL"], index=5, horizontal=True, label_visibility="collapsed")
+            p_sel = st.radio(
+                "Zoom:",
+                ["1M", "3M", "6M", "YTD", "1Y", "ALL"],
+                index=5,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
 
         df_c = trim_flat_start(df_hist)
         end = df_c.index[-1]
@@ -217,9 +263,59 @@ if page == "Dashboard":
         df_base = df_c.apply(lambda x: x / x.iloc[0] * 100)
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_base.index, y=df_base["Benchmark"], mode="lines", name="Benchmark", line=dict(color="#8b92a5", width=1.3, dash="dot"), hovertemplate="Benchmark: %{y:.1f}<extra></extra>"))
-        fig.add_trace(go.Scatter(x=df_base.index, y=df_base["Strategy"], mode="lines", name="Strategy", line=dict(color="#2ED9A0", width=2), hovertemplate="Strategy: %{y:.1f}<extra></extra>"))
-        fig.update_layout(template="plotly_white", plot_bgcolor="#11151c", paper_bgcolor="#11151c", font=dict(color="#c9ced6", size=12), margin=dict(l=0, r=0, t=30, b=0), height=400, hovermode="x unified", legend=dict(orientation="h", y=1.12, x=1, xanchor="right", bgcolor="rgba(0,0,0,0)", title=None, font=dict(size=12)), xaxis=dict(showgrid=False, showline=True, linecolor="#2a2f3a", ticks="outside", tickcolor="#2a2f3a"), yaxis=dict(title="Indexed Value (Base 100)", title_font=dict(size=11, color="#8b92a5"), showgrid=True, gridcolor="rgba(255,255,255,0.06)", zeroline=False, showline=False))
+        fig.add_trace(
+            go.Scatter(
+                x=df_base.index,
+                y=df_base["Benchmark"],
+                mode="lines",
+                name="Benchmark",
+                line={"color": "#8b92a5", "width": 1.3, "dash": "dot"},
+                hovertemplate="Benchmark: %{y:.1f}<extra></extra>",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df_base.index,
+                y=df_base["Strategy"],
+                mode="lines",
+                name="Strategy",
+                line={"color": "#2ED9A0", "width": 2},
+                hovertemplate="Strategy: %{y:.1f}<extra></extra>",
+            )
+        )
+        fig.update_layout(
+            template="plotly_white",
+            plot_bgcolor="#11151c",
+            paper_bgcolor="#11151c",
+            font={"color": "#c9ced6", "size": 12},
+            margin={"l": 0, "r": 0, "t": 30, "b": 0},
+            height=400,
+            hovermode="x unified",
+            legend={
+                "orientation": "h",
+                "y": 1.12,
+                "x": 1,
+                "xanchor": "right",
+                "bgcolor": "rgba(0,0,0,0)",
+                "title": None,
+                "font": {"size": 12},
+            },
+            xaxis={
+                "showgrid": False,
+                "showline": True,
+                "linecolor": "#2a2f3a",
+                "ticks": "outside",
+                "tickcolor": "#2a2f3a",
+            },
+            yaxis={
+                "title": "Indexed Value (Base 100)",
+                "title_font": {"size": 11, "color": "#8b92a5"},
+                "showgrid": True,
+                "gridcolor": "rgba(255,255,255,0.06)",
+                "zeroline": False,
+                "showline": False,
+            },
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
@@ -230,8 +326,24 @@ if page == "Dashboard":
             cum = (1 + s_ret).cumprod()
             dd = (cum - cum.cummax()) / cum.cummax()
             fig_dd = go.Figure()
-            fig_dd.add_trace(go.Scatter(x=dd.index, y=dd, fill="tozeroy", mode="lines", line=dict(color="#EF553B", width=1.5), name="Drawdown", fillcolor="rgba(239, 85, 59, 0.3)"))
-            fig_dd.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0), height=320, yaxis_tickformat=".1%", yaxis_title="Drawdown")
+            fig_dd.add_trace(
+                go.Scatter(
+                    x=dd.index,
+                    y=dd,
+                    fill="tozeroy",
+                    mode="lines",
+                    line={"color": "#EF553B", "width": 1.5},
+                    name="Drawdown",
+                    fillcolor="rgba(239, 85, 59, 0.3)",
+                )
+            )
+            fig_dd.update_layout(
+                template="plotly_dark",
+                margin={"l": 0, "r": 0, "t": 10, "b": 0},
+                height=320,
+                yaxis_tickformat=".1%",
+                yaxis_title="Drawdown",
+            )
             st.plotly_chart(fig_dd, use_container_width=True)
         with c_pie:
             st.subheader("Current Allocation")
@@ -241,12 +353,31 @@ if page == "Dashboard":
                 active = apply_ticker_names(active, ticker_names)
                 cash = max(0, 1.0 - active["Allocation"].sum())
                 if cash > 0.001:
-                    final = pd.concat([active, pd.DataFrame([{"Ticker": "CASH", "Name": "CASH", "Allocation": cash}])], ignore_index=True)
+                    final = pd.concat(
+                        [
+                            active,
+                            pd.DataFrame(
+                                [{"Ticker": "CASH", "Name": "CASH", "Allocation": cash}]
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
                 else:
                     final = active
-                fig_p = px.pie(final, values="Allocation", names="Name", hole=0.5, color_discrete_sequence=px.colors.qualitative.Prism)
+                fig_p = px.pie(
+                    final,
+                    values="Allocation",
+                    names="Name",
+                    hole=0.5,
+                    color_discrete_sequence=px.colors.qualitative.Prism,
+                )
                 fig_p.update_traces(textposition="outside", textinfo="percent+label")
-                fig_p.update_layout(template="plotly_dark", margin=dict(l=20, r=20, t=0, b=0), showlegend=False, height=370)
+                fig_p.update_layout(
+                    template="plotly_dark",
+                    margin={"l": 20, "r": 20, "t": 0, "b": 0},
+                    showlegend=False,
+                    height=370,
+                )
                 st.plotly_chart(fig_p, use_container_width=True)
             else:
                 st.info("Waiting for signals...")
@@ -262,27 +393,44 @@ elif page == "Daily Signals":
             d = d.sort_values("Allocation", ascending=False)
         col_filter1, col_filter2 = st.columns([1, 3])
         with col_filter1:
-            filter_opt = st.selectbox("Filter", ["All Signals", "BUY Only", "NEUTRAL Only"])
+            filter_opt = st.selectbox(
+                "Filter", ["All Signals", "BUY Only", "NEUTRAL Only"]
+            )
         if filter_opt == "BUY Only":
             d = d[d["Signal"] == "BUY"]
         elif filter_opt == "NEUTRAL Only":
             d = d[d["Signal"] == "NEUTRAL"]
         st.dataframe(
-            d, use_container_width=True, height=600, hide_index=True,
+            d,
+            use_container_width=True,
+            height=600,
+            hide_index=True,
             column_config={
-                "Allocation": st.column_config.ProgressColumn("Weight", format="%.2f", min_value=0, max_value=1),
-                "Proba_Hausse": st.column_config.NumberColumn("Probability Up", format="%.1f%%")
-            }
+                "Allocation": st.column_config.ProgressColumn(
+                    "Weight", format="%.2f", min_value=0, max_value=1
+                ),
+                "Proba_Hausse": st.column_config.NumberColumn(
+                    "Probability Up", format="%.1f%%"
+                ),
+            },
         )
         st.markdown("---")
         col_s1, col_s2, col_s3 = st.columns(3)
         with col_s1:
             st.metric("Total Tickers", len(df_signals))
         with col_s2:
-            n_buy = len(df_signals[df_signals["Signal"] == "BUY"]) if "Signal" in df_signals.columns else 0
+            n_buy = (
+                len(df_signals[df_signals["Signal"] == "BUY"])
+                if "Signal" in df_signals.columns
+                else 0
+            )
             st.metric("BUY Signals", n_buy)
         with col_s3:
-            alloc_total = df_signals["Allocation"].sum() if "Allocation" in df_signals.columns else 0
+            alloc_total = (
+                df_signals["Allocation"].sum()
+                if "Allocation" in df_signals.columns
+                else 0
+            )
             st.metric("Total Allocated", f"{alloc_total:.1%}")
     else:
         st.info(f"No signals available for {selected_market}.")
@@ -293,7 +441,11 @@ elif page == "Daily Signals":
 elif page == "Data Explorer":
     st.title("Market Data Explorer")
     default_tickers = ["AI.PA", "AIR.PA", "BNP.PA", "MC.PA", "OR.PA", "TTE.PA"]
-    tickers = df_signals["Ticker"].unique().tolist() if not df_signals.empty and "Ticker" in df_signals.columns else default_tickers
+    tickers = (
+        df_signals["Ticker"].unique().tolist()
+        if not df_signals.empty and "Ticker" in df_signals.columns
+        else default_tickers
+    )
 
     ticker_names = get_ticker_names(selected_market, BASE_DIR)
 
@@ -303,40 +455,92 @@ elif page == "Data Explorer":
 
     col_sel1, col_sel2 = st.columns([1, 3])
     with col_sel1:
-        selected_ticker = st.selectbox("Select Asset", tickers, index=0, format_func=format_ticker)
+        selected_ticker = st.selectbox(
+            "Select Asset", tickers, index=0, format_func=format_ticker
+        )
         currency_code, currency_symbol = get_ticker_currency(selected_ticker)
         st.caption(f"Devise : {currency_code}")
     with col_sel2:
-        period_exp = st.selectbox("Timeframe", ["1 Month", "3 Months", "6 Months", "1 Year", "5 Years"], index=2)
-    yf_period_map = {"1 Month": "1mo", "3 Months": "3mo", "6 Months": "6mo", "1 Year": "1y", "5 Years": "5y"}
+        period_exp = st.selectbox(
+            "Timeframe",
+            ["1 Month", "3 Months", "6 Months", "1 Year", "5 Years"],
+            index=2,
+        )
+    yf_period_map = {
+        "1 Month": "1mo",
+        "3 Months": "3mo",
+        "6 Months": "6mo",
+        "1 Year": "1y",
+        "5 Years": "5y",
+    }
     with st.spinner(f"Downloading {selected_ticker}..."):
-        df_asset = get_live_ticker_data(selected_ticker, period=yf_period_map[period_exp])
+        df_asset = get_live_ticker_data(
+            selected_ticker, period=yf_period_map[period_exp]
+        )
     if not df_asset.empty and len(df_asset) > 1:
         try:
             last_close = df_asset["adj close"].iloc[-1]
             prev_close = df_asset["adj close"].iloc[-2]
             daily_var = (last_close / prev_close) - 1
             total_ret_period = (last_close / df_asset["adj close"].iloc[0]) - 1
-            volatility = df_asset["adj close"].pct_change().dropna().std() * np.sqrt(252)
+            volatility = df_asset["adj close"].pct_change().dropna().std() * np.sqrt(
+                252
+            )
         except Exception:
             last_close = daily_var = total_ret_period = volatility = 0
         m1, m2, m3, m4 = st.columns(4)
         with m1:
-            display_kpi_card("Last Price", last_close, is_percent=False, prefix=f"{currency_symbol} ")
+            display_kpi_card(
+                "Last Price", last_close, is_percent=False, prefix=f"{currency_symbol} "
+            )
         with m2:
             display_kpi_card("Daily Change", daily_var, color_code=True)
         with m3:
-            display_kpi_card(f"Return ({period_exp})", total_ret_period, color_code=True)
+            display_kpi_card(
+                f"Return ({period_exp})", total_ret_period, color_code=True
+            )
         with m4:
             display_kpi_card("Ann. Volatility", volatility, is_percent=True)
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3])
-        fig.add_trace(go.Candlestick(
-            x=df_asset.index, open=df_asset["open"], high=df_asset["high"],
-            low=df_asset["low"], close=df_asset["close"], name="OHLC"
-        ), row=1, col=1)
-        colors = ["#00CC96" if r >= 0 else "#EF553B" for r in df_asset["adj close"].pct_change().fillna(0)]
-        fig.add_trace(go.Bar(x=df_asset.index, y=df_asset["volume"], name="Volume", marker_color=colors), row=2, col=1)
-        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=550, margin=dict(l=0, r=0, t=30, b=0), showlegend=False)
+        fig = make_subplots(
+            rows=2,
+            cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            row_heights=[0.7, 0.3],
+        )
+        fig.add_trace(
+            go.Candlestick(
+                x=df_asset.index,
+                open=df_asset["open"],
+                high=df_asset["high"],
+                low=df_asset["low"],
+                close=df_asset["close"],
+                name="OHLC",
+            ),
+            row=1,
+            col=1,
+        )
+        colors = [
+            "#00CC96" if r >= 0 else "#EF553B"
+            for r in df_asset["adj close"].pct_change().fillna(0)
+        ]
+        fig.add_trace(
+            go.Bar(
+                x=df_asset.index,
+                y=df_asset["volume"],
+                name="Volume",
+                marker_color=colors,
+            ),
+            row=2,
+            col=1,
+        )
+        fig.update_layout(
+            template="plotly_dark",
+            xaxis_rangeslider_visible=False,
+            height=550,
+            margin={"l": 0, "r": 0, "t": 30, "b": 0},
+            showlegend=False,
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning(f"No data for {selected_ticker}")
@@ -367,16 +571,23 @@ elif page == "Model Details":
         if champ["source"] == "mlflow":
             st.markdown(
                 '<span class="mlflow-badge badge-champion">MLflow - Champion v'
-                f'{champ["version"]}</span>', unsafe_allow_html=True
+                f"{champ['version']}</span>",
+                unsafe_allow_html=True,
             )
         elif champ["source"] == "local":
-            status = "promu champion" if champ.get("promoted") else "dernier run (non promu - seuils non atteints)"
+            status = (
+                "promu champion"
+                if champ.get("promoted")
+                else "dernier run (non promu - seuils non atteints)"
+            )
             st.markdown(
                 f'<span class="mlflow-badge badge-fallback">Fallback local - {status}</span>',
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
         else:
-            st.info("Aucune métrique disponible pour ce marché (ni MLflow, ni model_card.json local).")
+            st.info(
+                "Aucune métrique disponible pour ce marché (ni MLflow, ni model_card.json local)."
+            )
 
         if champ["metrics"]:
             st.markdown("### Model Performance")
@@ -395,34 +606,70 @@ elif page == "Model Details":
 
         st.markdown("---")
         st.markdown("### Feature Importance")
-        st.caption("Explicabilité du modèle XGBoost — variables les plus influentes sur la prédiction.")
+        st.caption(
+            "Explicabilité du modèle XGBoost — variables les plus influentes sur la prédiction."
+        )
         feat_imp = None
         if isinstance(champ.get("metrics"), dict):
             feat_imp = champ["metrics"].get("feature_importance")
         if feat_imp:
-            fi_df = pd.DataFrame(list(feat_imp.items()), columns=["Feature", "Importance"]).sort_values("Importance", ascending=True)
+            fi_df = pd.DataFrame(
+                list(feat_imp.items()), columns=["Feature", "Importance"]
+            ).sort_values("Importance", ascending=True)
         else:
-            demo_features = ["momentum_3m", "rsi_14", "volume_lag1", "pe_ratio", "book_to_market",
-                             "volatility_60d", "ff_smb", "ff_hml", "earnings_yield", "beta_1y"]
+            demo_features = [
+                "momentum_3m",
+                "rsi_14",
+                "volume_lag1",
+                "pe_ratio",
+                "book_to_market",
+                "volatility_60d",
+                "ff_smb",
+                "ff_hml",
+                "earnings_yield",
+                "beta_1y",
+            ]
             rng = np.random.default_rng(42)
             demo_vals = np.sort(rng.uniform(0.02, 0.22, size=len(demo_features)))
             fi_df = pd.DataFrame({"Feature": demo_features, "Importance": demo_vals})
-            st.caption("Données factices affichées à titre d'exemple — en attente de l'extraction réelle depuis le modèle XGBoost.")
+            st.caption(
+                "Données factices affichées à titre d'exemple — en attente de l'extraction réelle depuis le modèle XGBoost."
+            )
         fig_fi = px.bar(
-            fi_df, x="Importance", y="Feature", orientation="h",
-            color="Importance", color_continuous_scale=px.colors.sequential.Tealgrn
+            fi_df,
+            x="Importance",
+            y="Feature",
+            orientation="h",
+            color="Importance",
+            color_continuous_scale=px.colors.sequential.Tealgrn,
         )
-        fig_fi.update_layout(template="plotly_dark", height=400, margin=dict(l=0, r=0, t=10, b=0), showlegend=False, coloraxis_showscale=False)
+        fig_fi.update_layout(
+            template="plotly_dark",
+            height=400,
+            margin={"l": 0, "r": 0, "t": 10, "b": 0},
+            showlegend=False,
+            coloraxis_showscale=False,
+        )
         st.plotly_chart(fig_fi, use_container_width=True)
 
     with tab2:
         st.subheader("Cluster Analysis")
-        st.markdown("Segmentation based on RSI to identify momentum vs reversal regimes.")
-        if not df_signals.empty and "RSI" in df_signals.columns and "Return_3M" in df_signals.columns:
+        st.markdown(
+            "Segmentation based on RSI to identify momentum vs reversal regimes."
+        )
+        if (
+            not df_signals.empty
+            and "RSI" in df_signals.columns
+            and "Return_3M" in df_signals.columns
+        ):
             fig = px.scatter(
-                df_signals, x="RSI", y="Return_3M", color="Cluster", hover_name="Ticker",
+                df_signals,
+                x="RSI",
+                y="Return_3M",
+                color="Cluster",
+                hover_name="Ticker",
                 color_continuous_scale=px.colors.sequential.Viridis,
-                labels={"RSI": "RSI (20)", "Return_3M": "3-Month Momentum"}
+                labels={"RSI": "RSI (20)", "Return_3M": "3-Month Momentum"},
             )
             fig.update_layout(template="plotly_dark", height=500)
             st.plotly_chart(fig, use_container_width=True)
@@ -445,21 +692,37 @@ elif page == "Rebalance History":
         with col_r1:
             st.metric("Total Rebalances", len(df_rebalance))
         with col_r2:
-            avg_stocks = df_rebalance["N_Stocks"].mean() if "N_Stocks" in df_rebalance.columns else 0
+            avg_stocks = (
+                df_rebalance["N_Stocks"].mean()
+                if "N_Stocks" in df_rebalance.columns
+                else 0
+            )
             st.metric("Avg. Stocks/Month", f"{avg_stocks:.1f}")
         with col_r3:
-            last_rebal = df_rebalance.index[0].date() if len(df_rebalance) > 0 else "N/A"
+            last_rebal = (
+                df_rebalance.index[0].date() if len(df_rebalance) > 0 else "N/A"
+            )
             st.metric("Last Rebalance", str(last_rebal))
         st.markdown("---")
         if "N_Stocks" in df_rebalance.columns:
             st.subheader("Portfolio Size Evolution")
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_rebalance.index, y=df_rebalance["N_Stocks"],
-                mode="lines+markers", name="N Stocks",
-                line=dict(color="#00CC96", width=2), marker=dict(size=6)
-            ))
-            fig.update_layout(template="plotly_dark", height=350, yaxis_title="Number of Stocks", xaxis_title="Date")
+            fig.add_trace(
+                go.Scatter(
+                    x=df_rebalance.index,
+                    y=df_rebalance["N_Stocks"],
+                    mode="lines+markers",
+                    name="N Stocks",
+                    line={"color": "#00CC96", "width": 2},
+                    marker={"size": 6},
+                )
+            )
+            fig.update_layout(
+                template="plotly_dark",
+                height=350,
+                yaxis_title="Number of Stocks",
+                xaxis_title="Date",
+            )
             st.plotly_chart(fig, use_container_width=True)
         st.subheader("Detailed Rebalancing Log")
         st.dataframe(df_rebalance, use_container_width=True, height=400)
@@ -472,11 +735,14 @@ elif page == "Rebalance History":
 # =============================================================================
 
 st.markdown("---")
-st.markdown("""
+st.markdown(
+    """
 <div class="disclaimer-box">
     <div class="disclaimer-title">AVIS DE NON-RESPONSABILITÉ</div>
     <p>Les informations présentées sur ce tableau de bord sont fournies <strong>à titre informatif et éducatif uniquement</strong>. Elles ne constituent en aucun cas un conseil en investissement.</p>
     <p><strong>Risques :</strong> Tout investissement comporte des risques. Les performances passées ne garantissent pas les résultats futurs.</p>
     <p><strong>Responsabilité :</strong> Consultez un conseiller financier agréé avant toute décision d'investissement.</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)

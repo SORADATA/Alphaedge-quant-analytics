@@ -6,29 +6,30 @@ Optimisation Bayésienne (Optuna) par modèle.
 Interface sklearn : fit / predict_proba / get_model_weights.
 """
 
-import warnings
-import numpy as np
-import pandas as pd
-import optuna
 import pickle
-from typing import Dict, List, Optional
-import xgboost as xgb
-import lightgbm as lgb
+import warnings
 from dataclasses import dataclass, field
-from sklearn.linear_model import LogisticRegression, RidgeClassifier
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.preprocessing import StandardScaler
+
+import lightgbm as lgb
+import numpy as np
+import optuna
+import pandas as pd
+import xgboost as xgb
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.linear_model import LogisticRegression, RidgeClassifier
+from sklearn.preprocessing import StandardScaler
+
+from const import FEATURE_GROUPS
 from src.models.cv import PurgedTimeSeriesSplit
 from src.utils.logger import setup_logger
-from const import FEATURE_GROUPS
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 warnings.filterwarnings("ignore")
 logger = setup_logger("ensemble")
 
 
-def _all_features() -> List[str]:
+def _all_features() -> list[str]:
     seen, result = set(), []
     for feats in FEATURE_GROUPS.values():
         for f in feats:
@@ -38,12 +39,12 @@ def _all_features() -> List[str]:
     return result
 
 
-def _available(df: pd.DataFrame) -> List[str]:
+def _available(df: pd.DataFrame) -> list[str]:
     all_f = _all_features()
     return [f for f in all_f if f in df.columns]
 
 
-def _prepare_X(df: pd.DataFrame, features: List[str]) -> pd.DataFrame:
+def _prepare_X(df: pd.DataFrame, features: list[str]) -> pd.DataFrame:
     df_prepared = df.copy()
     missing = [col for col in features if col not in df_prepared.columns]
     if missing:
@@ -52,6 +53,7 @@ def _prepare_X(df: pd.DataFrame, features: List[str]) -> pd.DataFrame:
             df_prepared[col] = 0.0
     return df_prepared[features].fillna(0).replace([np.inf, -np.inf], 0)
 
+
 # ══════════════════════════════════════════════════════════════════
 # OPTUNA OBJECTIVES
 # ══════════════════════════════════════════════════════════════════
@@ -59,20 +61,23 @@ def _prepare_X(df: pd.DataFrame, features: List[str]) -> pd.DataFrame:
 
 def _xgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> xgb.XGBClassifier:
     from sklearn.metrics import roc_auc_score
+
     cv = PurgedTimeSeriesSplit(n_splits=5)
 
     def objective(trial):
         params = {
-            "n_estimators":     trial.suggest_int("n_estimators", 100, 500, step=50),
-            "max_depth":        trial.suggest_int("max_depth", 3, 6),
-            "learning_rate":    trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
-            "subsample":        trial.suggest_float("subsample", 0.6, 1.0),
+            "n_estimators": trial.suggest_int("n_estimators", 100, 500, step=50),
+            "max_depth": trial.suggest_int("max_depth", 3, 6),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
             "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
-            "reg_alpha":        trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-            "reg_lambda":       trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-            "gamma":            trial.suggest_float("gamma", 0.0, 1.0),
-            "eval_metric": "auc", "random_state": 42, "n_jobs": -1,
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            "gamma": trial.suggest_float("gamma", 0.0, 1.0),
+            "eval_metric": "auc",
+            "random_state": 42,
+            "n_jobs": -1,
         }
         scores = []
         for tr_idx, val_idx in cv.split(X):
@@ -90,27 +95,34 @@ def _xgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> xgb.XGBClass
     )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
 
-    best = xgb.XGBClassifier(**study.best_params, eval_metric="auc", random_state=42, n_jobs=-1)
+    best = xgb.XGBClassifier(
+        **study.best_params, eval_metric="auc", random_state=42, n_jobs=-1
+    )
     best.fit(X, y, verbose=False)
-    logger.info(f"   XGB best AUC (CV): {study.best_value:.4f} | params: {study.best_params}")
+    logger.info(
+        f"   XGB best AUC (CV): {study.best_value:.4f} | params: {study.best_params}"
+    )
     return best
 
 
 def _lgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> lgb.LGBMClassifier:
     from sklearn.metrics import roc_auc_score
+
     cv = PurgedTimeSeriesSplit(n_splits=5)
 
     def objective(trial):
         params = {
-            "n_estimators":     trial.suggest_int("n_estimators", 100, 500, step=50),
-            "max_depth":        trial.suggest_int("max_depth", 3, 7),
-            "learning_rate":    trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
-            "subsample":        trial.suggest_float("subsample", 0.6, 1.0),
+            "n_estimators": trial.suggest_int("n_estimators", 100, 500, step=50),
+            "max_depth": trial.suggest_int("max_depth", 3, 7),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
             "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
-            "reg_alpha":        trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-            "reg_lambda":       trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-            "random_state": 42, "n_jobs": -1, "verbose": -1,
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            "random_state": 42,
+            "n_jobs": -1,
+            "verbose": -1,
         }
         scores = []
         for tr_idx, val_idx in cv.split(X):
@@ -128,9 +140,13 @@ def _lgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> lgb.LGBMClas
     )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
 
-    best = lgb.LGBMClassifier(**study.best_params, random_state=42, n_jobs=-1, verbose=-1)
+    best = lgb.LGBMClassifier(
+        **study.best_params, random_state=42, n_jobs=-1, verbose=-1
+    )
     best.fit(X, y)
-    logger.info(f"   LGB best AUC (CV): {study.best_value:.4f} | params: {study.best_params}")
+    logger.info(
+        f"   LGB best AUC (CV): {study.best_value:.4f} | params: {study.best_params}"
+    )
     return best
 
 
@@ -138,17 +154,18 @@ def _lgb_objective(X: pd.DataFrame, y: pd.Series, n_trials: int) -> lgb.LGBMClas
 # ALPHAEDGE ENSEMBLE
 # ══════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
     n_optuna_trials: int = 50
 
     # Déclaration stricte des variables internes de la dataclass
-    xgb_model_: Optional[xgb.XGBClassifier] = field(init=False, default=None)
-    lgb_model_: Optional[lgb.LGBMClassifier] = field(init=False, default=None)
-    ridge_model_: Optional[CalibratedClassifierCV] = field(init=False, default=None)
-    meta_model_: Optional[LogisticRegression] = field(init=False, default=None)
-    scaler_: Optional[StandardScaler] = field(init=False, default=None)
-    features_: Optional[List[str]] = field(init=False, default=None)
+    xgb_model_: xgb.XGBClassifier | None = field(init=False, default=None)
+    lgb_model_: lgb.LGBMClassifier | None = field(init=False, default=None)
+    ridge_model_: CalibratedClassifierCV | None = field(init=False, default=None)
+    meta_model_: LogisticRegression | None = field(init=False, default=None)
+    scaler_: StandardScaler | None = field(init=False, default=None)
+    features_: list[str] | None = field(init=False, default=None)
     classes_: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -168,7 +185,7 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
         for tr_idx, val_idx in cv.split(X):
             m = model_cls(**fit_kwargs)
             m.fit(X.iloc[tr_idx], y.iloc[tr_idx])
-            
+
             # Gestion spécifique pour RidgeClassifier qui n'a pas predict_proba natif
             if hasattr(m, "predict_proba"):
                 oof[val_idx] = m.predict_proba(X.iloc[val_idx])[:, 1]
@@ -195,7 +212,9 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
 
         logger.info("  [3/3] Ridge (calibré)...")
         self.scaler_ = StandardScaler()
-        X_scaled = pd.DataFrame(self.scaler_.fit_transform(X), columns=X.columns, index=X.index)
+        X_scaled = pd.DataFrame(
+            self.scaler_.fit_transform(X), columns=X.columns, index=X.index
+        )
         ridge_base = RidgeClassifier(alpha=1.0, random_state=42)
         self.ridge_model_ = CalibratedClassifierCV(ridge_base, cv=5, method="sigmoid")
         self.ridge_model_.fit(X_scaled, y)
@@ -203,11 +222,14 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
         # ── Niveau 1 : méta-learner sur probas OOF (Correction du Leakage)
         logger.info("  [Meta] Stacking LogisticRegression...")
         oof_xgb = self._oof_probas(
-            X, y, xgb.XGBClassifier, {**self.xgb_model_.get_params(), "eval_metric": "auc"}
-            )
+            X,
+            y,
+            xgb.XGBClassifier,
+            {**self.xgb_model_.get_params(), "eval_metric": "auc"},
+        )
         oof_lgb = self._oof_probas(
             X, y, lgb.LGBMClassifier, {**self.lgb_model_.get_params(), "verbose": -1}
-            )
+        )
 
         # Calcul propre du OOF pour le modèle Ridge calibré
         oof_ridge = np.zeros(len(X_scaled))
@@ -215,7 +237,7 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
         for tr_idx, val_idx in cv.split(X_scaled):
             m_ridge = CalibratedClassifierCV(
                 RidgeClassifier(alpha=1.0, random_state=42), cv=3, method="sigmoid"
-                )
+            )
             m_ridge.fit(X_scaled.iloc[tr_idx], y.iloc[tr_idx])
             oof_ridge[val_idx] = m_ridge.predict_proba(X_scaled.iloc[val_idx])[:, 1]
 
@@ -232,7 +254,9 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
         X = _prepare_X(df, self.features_)
-        X_scaled = pd.DataFrame(self.scaler_.transform(X), columns=X.columns, index=X.index)
+        X_scaled = pd.DataFrame(
+            self.scaler_.transform(X), columns=X.columns, index=X.index
+        )
 
         p_xgb = self.xgb_model_.predict_proba(X)[:, 1]
         p_lgb = self.lgb_model_.predict_proba(X)[:, 1]
@@ -244,14 +268,14 @@ class AlphaEdgeEnsemble(BaseEstimator, ClassifierMixin):
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         return (self.predict_proba(df)[:, 1] >= 0.5).astype(int)
 
-    def get_model_weights(self) -> Dict[str, float]:
+    def get_model_weights(self) -> dict[str, float]:
         if self.meta_model_ is None:
-            return {"xgb": 1/3, "lgb": 1/3, "ridge": 1/3}
+            return {"xgb": 1 / 3, "lgb": 1 / 3, "ridge": 1 / 3}
         coefs = np.abs(self.meta_model_.coef_[0])
         total = coefs.sum() or 1.0
         return {
-            "xgb":   round(coefs[0] / total, 4),
-            "lgb":   round(coefs[1] / total, 4),
+            "xgb": round(coefs[0] / total, 4),
+            "lgb": round(coefs[1] / total, 4),
             "ridge": round(coefs[2] / total, 4),
         }
 

@@ -1,21 +1,22 @@
-import os
 import json
+import os
 import warnings
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
+
 import pandas as pd
 import yaml
 from huggingface_hub import HfApi, hf_hub_download
-from src.utils.logger import setup_logger
-from src.pipeline.etl import get_data_pipeline
-from src.pipeline.backtest import (
-    backtest_strategy_with_rebalancing, 
-    generate_live_signals,
-    _build_price_matrix
-)
-from src.models.model_loader import load_champion
-from const import BACKTEST_YEARS
 
+from const import BACKTEST_YEARS
+from src.models.model_loader import load_champion
+from src.pipeline.backtest import (
+    _build_price_matrix,
+    backtest_strategy_with_rebalancing,
+    generate_live_signals,
+)
+from src.pipeline.etl import get_data_pipeline
+from src.utils.logger import setup_logger
 
 # =============================================================================
 # CONFIGURATION GLOBALE
@@ -26,11 +27,7 @@ HF_REPO_ID = os.getenv("HF_REPO_ID", "soradata/alphaedge-data")
 hf_api = HfApi()
 
 
-def upload_to_hf(
-    local_path: Path,
-    hf_filename: str,
-    market_name: str
-) -> bool:
+def upload_to_hf(local_path: Path, hf_filename: str, market_name: str) -> bool:
     """Upload vers le repo Hugging Face, sous data/{market_name}/{hf_filename}."""
     if not HF_TOKEN:
         return False
@@ -49,8 +46,7 @@ def upload_to_hf(
 
 
 def load_rebalance_history_from_hf(
-    market_name: str,
-    local_fallback: Path
+    market_name: str, local_fallback: Path
 ) -> pd.DataFrame:
     """
     Récupère l'historique de rebalancing existant (source de vérité pour
@@ -96,7 +92,9 @@ def run_pipeline(market_config: dict) -> None:
     try:
         # 1. Chargement du modèle champion
         model = load_champion(market_name)
-        logger.info(f"Modèle champion prêt pour {market_name} | type={type(model).__name__}")
+        logger.info(
+            f"Modèle champion prêt pour {market_name} | type={type(model).__name__}"
+        )
 
         # 2. ETL — récupère la séance N sur yfinance
         df_daily, df_monthly = get_data_pipeline(market_config)
@@ -108,12 +106,14 @@ def run_pipeline(market_config: dict) -> None:
         df_monthly_bt = df_monthly[df_monthly.index.get_level_values("date") >= cutoff]
 
         if df_daily_bt.empty or df_monthly_bt.empty:
-            raise ValueError(f"Pas de données sur les {BACKTEST_YEARS} dernières années.")
+            raise ValueError(
+                f"Pas de données sur les {BACKTEST_YEARS} dernières années."
+            )
 
         last_session = df_daily_bt.index.get_level_values("date").max()
         logger.info(
             f"Dernière séance récupérée : {last_session.date()} | Backtest window : {cutoff.date()} -> aujourd'hui"
-            )
+        )
 
         base_dir = Path(f"data/processed/{market_name}")
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -125,13 +125,15 @@ def run_pipeline(market_config: dict) -> None:
         # Création standardisée de la matrice de prix
         daily_prices = _build_price_matrix(df_daily_bt)
         bench_ticker = market_config.get("benchmark_ticker")
-        
+
         if not bench_ticker:
             raise ValueError(f"Aucun benchmark_ticker configuré pour {market_name}.")
 
         # 3. Backtest historique
-        logger.info(f"Executing backtest for {market_name} with benchmark {bench_ticker}...")
-        hist_df, rebal_df_backtest, metrics = backtest_strategy_with_rebalancing(
+        logger.info(
+            f"Executing backtest for {market_name} with benchmark {bench_ticker}..."
+        )
+        hist_df, _rebal_df_backtest, metrics = backtest_strategy_with_rebalancing(
             df_daily_bt,
             df_monthly_bt,
             model,
@@ -140,19 +142,23 @@ def run_pipeline(market_config: dict) -> None:
         )
 
         # 4. Signaux live (séance N)
-        logger.info(f"Generating daily live signals for {market_name} (session {last_session.date()})...")
+        logger.info(
+            f"Generating daily live signals for {market_name} (session {last_session.date()})..."
+        )
         rebalance_history = load_rebalance_history_from_hf(market_name, rebal_path)
-        
+
         signals_df, rebalance_history_updated = generate_live_signals(
-            df_daily_bt, 
-            daily_prices, 
-            model, 
+            df_daily_bt,
+            daily_prices,
+            model,
             rebalance_history,
             market_config,
         )
 
         if signals_df.empty:
-            logger.error(f"[{market_name}] ATTENTION : latest_signals est vide. Vérifier les logs de scoring.")
+            logger.error(
+                f"[{market_name}] ATTENTION : latest_signals est vide. Vérifier les logs de scoring."
+            )
 
         # 5. Sauvegarde locale
         hist_df.to_parquet(hist_path)
@@ -161,15 +167,19 @@ def run_pipeline(market_config: dict) -> None:
 
         metadata = {
             "market_name": market_name,
-            "last_run_utc": datetime.now(timezone.utc).isoformat(),
+            "last_run_utc": datetime.now(UTC).isoformat(),
             "last_session_date": str(last_session.date()),
             "model_type": type(model).__name__,
             "n_signals": len(signals_df),
-            "n_buy_signals": int((signals_df["Signal"] == "BUY").sum()) if not signals_df.empty else 0,
-            "last_rebalance": str(rebalance_history_updated.index.max().date()) if not rebalance_history_updated.empty else None,
+            "n_buy_signals": int((signals_df["Signal"] == "BUY").sum())
+            if not signals_df.empty
+            else 0,
+            "last_rebalance": str(rebalance_history_updated.index.max().date())
+            if not rebalance_history_updated.empty
+            else None,
             "metrics": metrics,
         }
-        
+
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2, default=str)
 
@@ -177,10 +187,18 @@ def run_pipeline(market_config: dict) -> None:
 
         # 6. Synchronisation Cloud (Hugging Face)
         upload_results = {
-            "portfolio_history": upload_to_hf(hist_path, "portfolio_history.parquet", market_name),
-            "rebalance_history": upload_to_hf(rebal_path, "rebalance_history.parquet", market_name),
-            "latest_signals": upload_to_hf(signals_path, "latest_signals.parquet", market_name),
-            "data_metadata": upload_to_hf(metadata_path, "data_metadata.json", market_name),
+            "portfolio_history": upload_to_hf(
+                hist_path, "portfolio_history.parquet", market_name
+            ),
+            "rebalance_history": upload_to_hf(
+                rebal_path, "rebalance_history.parquet", market_name
+            ),
+            "latest_signals": upload_to_hf(
+                signals_path, "latest_signals.parquet", market_name
+            ),
+            "data_metadata": upload_to_hf(
+                metadata_path, "data_metadata.json", market_name
+            ),
         }
 
         failed_uploads = [k for k, ok in upload_results.items() if not ok]
@@ -193,7 +211,7 @@ def run_pipeline(market_config: dict) -> None:
 
         logger.info(
             f"Pipeline terminé | Sharpe: {metrics.get('Sharpe', 'N/A')} | Signaux BUY: {metadata['n_buy_signals']}/{metadata['n_signals']}"
-            )
+        )
 
     except Exception as e:
         logger.critical(f"CRITICAL FAILURE {market_name}: {e}", exc_info=True)

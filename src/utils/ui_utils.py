@@ -51,12 +51,15 @@ def display_kpi_card(
             html_val = f'<span class="kpi-value">{formatted_val}</span>'
 
     css_class = "kpi-minimal" if minimal else "kpi-container"
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="{css_class}">
         <div class="kpi-label">{label}</div>
         {html_val}
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def load_css():
@@ -64,7 +67,8 @@ def load_css():
     Injecte le style CSS custom du dashboard (cartes KPI, disclaimer,
     badges MLflow). À appeler une seule fois, juste après les imports.
     """
-    st.markdown("""
+    st.markdown(
+        """
     <style>
         .main { background-color: #0E1117; }
         .kpi-container {
@@ -107,4 +111,6 @@ def load_css():
         .badge-champion { background-color: rgba(0, 204, 150, 0.15); color: #00CC96; }
         .badge-fallback { background-color: rgba(255, 193, 7, 0.15); color: #FFC107; }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
