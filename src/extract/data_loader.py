@@ -9,7 +9,9 @@ Fonctions :
 """
 
 from datetime import datetime
+
 import pandas as pd
+
 from src.utils.logger import setup_logger
 
 logger = setup_logger("data_loader")
@@ -34,7 +36,9 @@ def load_all_data(market: str, hf_repo_id: str) -> tuple:
     tuple — (df_hist, df_signals, df_rebalance, errors)
     """
     clean_market = str(market).strip()
-    base_url = f"https://huggingface.co/datasets/{hf_repo_id}/resolve/main/data/{clean_market}"
+    base_url = (
+        f"https://huggingface.co/datasets/{hf_repo_id}/resolve/main/data/{clean_market}"
+    )
 
     errors = []
 

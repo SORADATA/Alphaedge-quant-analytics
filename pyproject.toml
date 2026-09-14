@@ -58,4 +58,17 @@ dependencies = [
 dev = [
     "jupyter>=1.0.0",
     "notebook>=7.0.6",
+    "ruff>=0.6.0",
+    "pytest>=8.3.0",
+]
+
+[tool.ruff.lint]
+# On dit à Ruff de fermer les yeux sur ces erreurs spécifiques pour l'instant
+ignore = [
+    "BLE001",  # Les exceptions aveugles (except Exception)
+    "DTZ",     # Les obligations de fuseaux horaires (datetime sans tz)
+    "S110",    # Les try/except/pass silencieux
+    "RUF013",  # Les types Optional implicites
+    "RUF059",  # Les variables déballées mais non utilisées
+    "B018"     # Les expressions inutiles (le fameux 'df' tout seul)
 ]

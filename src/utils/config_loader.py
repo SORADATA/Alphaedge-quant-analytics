@@ -1,15 +1,15 @@
-import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
 import pandas as pd
+import yaml
+
 from src.utils.logger import setup_logger
 
 logger = setup_logger("ConfigLoader")
 
 
-def load_market_config(
-    config_path: Path
-) -> Dict[str, Any]:
+def load_market_config(config_path: Path) -> dict[str, Any]:
     """Charge une configuration spécifique depuis un fichier YAML donné."""
     if not config_path.exists():
         logger.error(f"Fichier de config introuvable : {config_path}")
@@ -17,7 +17,7 @@ def load_market_config(
 
     try:
         # Ajout de l'encodage utf-8 pour éviter les crashs sur les accents/emojis
-        with open(config_path, 'r', encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except yaml.YAMLError as e:
         logger.error(f"Erreur YAML dans {config_path}: {e}")
@@ -41,10 +41,10 @@ def get_ticker_names(market: str, base_dir: Path) -> dict:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
-                
+
             if config.get("market_name", "").strip().upper() == market.strip().upper():
                 return config.get("ticker_names", {})
-                
+
         except Exception as e:
             logger.warning(f"Lecture échouée pour {config_path} : {e}")
             continue
@@ -57,7 +57,7 @@ def apply_ticker_names(
     df: pd.DataFrame,
     ticker_names: dict,
     ticker_col: str = "Ticker",
-    name_col: str = "Name"
+    name_col: str = "Name",
 ) -> pd.DataFrame:
     """
     Ajoute une colonne `name_col` juste après `ticker_col` avec le nom complet
