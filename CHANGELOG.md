@@ -1,3 +1,13 @@
+## <small>1.17.2 (2026-09-24)</small>
+
+* Fix linting et desactivation temporaire règles strictes ([e22a47f](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/e22a47f))
+* Merge pull request #35 from SORADATA/fix/alphaedge ([44a508a](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/44a508a)), closes [#35](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/35)
+* fix: add ruff to quality code ([b128d0d](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/b128d0d))
+* fix: resolve indentation problem in _add_momentum_factors ([dc9187f](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/dc9187f))
+* fix: resolve Ruff error for best practice ([03d9c07](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/03d9c07))
+* fix: resolve Ruff format ([1540a88](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/1540a88))
+* refactor: resolve Ruff conflicts ([a040627](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/a040627))
+
 ## <small>1.17.1 (2026-09-14)</small>
 
 * Merge pull request #34 from SORADATA/fix/alphaedge ([9c41fb0](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/9c41fb0)), closes [#34](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/34)
