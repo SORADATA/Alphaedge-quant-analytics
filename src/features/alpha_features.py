@@ -30,8 +30,10 @@ logger = setup_logger("alpha_features")
 
 def _add_momentum_factors(df: pd.DataFrame, g) -> pd.DataFrame:
     df["return_1m"] = g["adj close"].transform(lambda x: x.pct_change(1))
-    for lag in [2, 3, 6, 9, 12]:
-        df[f"return_{lag}m"] = g["adj close"].transform(lambda x: x.pct_change(lag))
+    lags = [1, 2, 6, 9, 12]
+
+    for lag in lags:
+        df[f"return_{lag}m"] = g["adj close"].transform(lambda x, lag=lag: x.pct_change(lag))
     pct_12 = g["adj close"].transform(lambda x: x.pct_change(12))
     pct_1 = g["adj close"].transform(lambda x: x.pct_change(1))
     pct_6 = g["adj close"].transform(lambda x: x.pct_change(6))
@@ -254,7 +256,7 @@ def get_fama_french_betas(data: pd.DataFrame, ff_region: str) -> pd.DataFrame:
 
 def add_all_features(df: pd.DataFrame, market_config: dict) -> pd.DataFrame:
     if not isinstance(df.index, pd.MultiIndex):
-        raise ValueError("MultiIndex requis.")
+        raise TypeError("MultiIndex requis.")
     if "ff_region" not in market_config:
         raise ValueError(
             "ff_region manquant dans market_config — vérifiez le fichier de config du marché."
