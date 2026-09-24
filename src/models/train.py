@@ -328,10 +328,8 @@ def _log_and_promote_to_mlflow(
             else:
                 logger.warning(f"[{market_name}] CHALLENGER REJETÉ — {reason}")
 
-    except MlflowException as exc:
-        logger.error(
-            f"[{market_name}] Erreur durant le flux MLflow : {exc}", exc_info=True
-        )
+    except MlflowException:
+        logger.exception(f"[{market_name}] Erreur durant le flux MLflow")
 
 
 # =============================================================================

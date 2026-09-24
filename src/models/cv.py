@@ -37,8 +37,8 @@ class PurgedTimeSeriesSplit(BaseCrossValidator):
         Instancie la validation croisée en lisant les variables d'environnement du workflow.
         Utilise les valeurs 5 et 0.01 par défaut si rien n'est défini dans le YAML.
         """
-        splits = int(os.getenv("CV_SPLITS", 5))
-        embargo = float(os.getenv("CV_EMBARGO", 0.01))
+        splits = int(os.getenv("CV_SPLITS", "5"))
+        embargo = float(os.getenv("CV_EMBARGO", "0.01"))
 
         return cls(n_splits=splits, embargo_pct=embargo)
 
