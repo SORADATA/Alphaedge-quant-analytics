@@ -35,7 +35,7 @@ def _add_momentum_factors(df: pd.DataFrame, g) -> pd.DataFrame:
     for lag in lags:
         df[f"return_{lag}m"] = g["adj close"].transform(
             lambda x, lag=lag: x.pct_change(lag)
-            )
+        )
     pct_12 = g["adj close"].transform(lambda x: x.pct_change(12))
     pct_1 = g["adj close"].transform(lambda x: x.pct_change(1))
     pct_6 = g["adj close"].transform(lambda x: x.pct_change(6))
