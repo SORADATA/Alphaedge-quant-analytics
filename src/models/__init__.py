@@ -1,4 +1,4 @@
-from src.models.ensemble import AlphaEdgeEnsemble, FEATURE_GROUPS
 from src.models.cv import PurgedTimeSeriesSplit
+from src.models.ensemble import FEATURE_GROUPS, AlphaEdgeEnsemble
 
-__all__ = ["AlphaEdgeEnsemble", "FEATURE_GROUPS", "PurgedTimeSeriesSplit"]
+__all__ = ["FEATURE_GROUPS", "AlphaEdgeEnsemble", "PurgedTimeSeriesSplit"]

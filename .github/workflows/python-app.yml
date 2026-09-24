@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v7
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
     
     - name: ⚡ Installer uv
       uses: astral-sh/setup-uv@v3
@@ -25,21 +26,25 @@ jobs:
     - name: 🐍 Configurer Python 3.12
       run: uv python install 3.12
 
-    - name: 📦 Install dependencies
+    - name: 📦 Installer les dépendances
       run: uv sync --all-groups
         
-    - name: Lint with flake8
+    - name: 🧹 Linting & Analyse Statique (Ruff)
       run: |
-        # Arrête le build s'il y a de grosses erreurs de syntaxe
-        uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Affiche juste des avertissements pour le style (longueur de ligne, etc.)
-        uv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-  
-    - name: Test with pytest
-      continue-on-error: true 
+        # Remplace flake8. Vérifie les erreurs de syntaxe, imports inutilisés, etc.
+        uv run ruff check . --output-format=github
+        
+    - name: 🎨 Vérification du formatage (Ruff)
+      run: |
+        # Remplace Black. Échoue si le code n'est pas correctement formaté.
+        uv run ruff format . --check
+
+    - name: 🧪 Tests unitaires (Pytest)
       run: |
         if [ -d "tests" ]; then
-          uv run pytest
+          # Stoppe l'exécution après 3 erreurs fatales pour gagner du temps
+          uv run pytest --maxfail=3 -v
         else
-          echo "⚠️ Pas de dossier 'tests' trouvé. Skipping tests."
+          echo "⚠️ Pas de dossier 'tests' trouvé. Échec forcé pour exiger des tests."
+          exit 1
         fi

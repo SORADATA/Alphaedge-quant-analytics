@@ -1,13 +1,12 @@
 import pandas as pd
-from typing import Tuple, List
-from const import VARS_TO_LAG, RESAMPLE_MEAN_COLS, RESAMPLE_LAST_EXCLUDE
+
+from const import RESAMPLE_LAST_EXCLUDE, RESAMPLE_MEAN_COLS, VARS_TO_LAG
 from src.features.alpha_features import (
-    compute_technical_indicators,
     add_all_features,
+    compute_technical_indicators,
 )
 from src.transform.ticker_manager import validate_and_clean_tickers
 from src.utils.logger import setup_logger
-
 
 logger = setup_logger("processor")
 
@@ -25,9 +24,11 @@ class MarketDataProcessor:
         (ex: "Europe_5_Factors", "Emerging_5_Factors", "North_America_5_Factors").
     """
 
-    def __init__(self, active_tickers: List[str], ff_region: str):
+    def __init__(self, active_tickers: list[str], ff_region: str):
         if not ff_region:
-            raise ValueError("ff_region est obligatoire — vérifiez le fichier de config du marché.")
+            raise ValueError(
+                "ff_region est obligatoire — vérifiez le fichier de config du marché."
+            )
         self.active_tickers = active_tickers
         self.ff_region = ff_region
 
@@ -40,13 +41,15 @@ class MarketDataProcessor:
 
         mean_part = (
             df.unstack("ticker")[RESAMPLE_MEAN_COLS[0]]
-            .resample("BME").mean()
+            .resample("BME")
+            .mean()
             .stack("ticker")
             .to_frame(RESAMPLE_MEAN_COLS[0])
         )
         last_part = (
             df.unstack()[last_cols]
-            .resample("BME").last()
+            .resample("BME")
+            .last()
             .stack("ticker", future_stack=True)
         )
 
@@ -61,7 +64,7 @@ class MarketDataProcessor:
         return df
 
     # Pipeline principale
-    def process(self, raw_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
+    def process(self, raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Exécute la pipeline de transformation complète.
         """
@@ -71,7 +74,7 @@ class MarketDataProcessor:
             df["adj close"] = df["close"]
             logger.warning("adj close absent — utilisation de close comme proxy.")
 
-        df, valid_tickers, alerts = validate_and_clean_tickers(df, self.active_tickers)
+        df, _valid_tickers, alerts = validate_and_clean_tickers(df, self.active_tickers)
         df = compute_technical_indicators(df)
 
         logger.info("Agrégation à la fréquence mensuelle...")

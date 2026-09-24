@@ -14,9 +14,8 @@ Fonctions :
 import json
 from pathlib import Path
 
-import mlflow
-from mlflow.tracking import MlflowClient
 from mlflow.exceptions import MlflowException
+from mlflow.tracking import MlflowClient
 
 from src.utils.logger import setup_logger
 
@@ -72,7 +71,9 @@ def get_champion_metrics(
             return result
         except MlflowException as e:
             result["error"] = f"MLflow: {e}"
-            logger.warning(f"Alias 'champion' introuvable pour {registered_model_name} : {e}")
+            logger.warning(
+                f"Alias 'champion' introuvable pour {registered_model_name} : {e}"
+            )
         except Exception as e:
             result["error"] = f"MLflow: {e}"
             logger.warning(f"Erreur MLflow pour {registered_model_name} : {e}")
@@ -92,7 +93,9 @@ def get_champion_metrics(
             result["promoted"] = card.get("mlflow", {}).get("promoted", False)
             result["run_id"] = card.get("mlflow", {}).get("run_id")
         except Exception as e:
-            result["error"] = (result["error"] + " | " if result["error"] else "") + f"model_card.json: {e}"
+            result["error"] = (
+                result["error"] + " | " if result["error"] else ""
+            ) + f"model_card.json: {e}"
             logger.error(f"Lecture model_card.json échouée pour {market} : {e}")
     elif result["source"] is None:
         logger.warning(f"Aucun model_card.json trouvé pour {market} ({card_path})")

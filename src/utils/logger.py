@@ -1,6 +1,7 @@
 import logging
 import sys
 from datetime import datetime
+
 from const import LOG_DIR
 
 
@@ -9,7 +10,7 @@ def setup_logger(name: str = "PortfolioPipeline") -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     if not logger.handlers:
-        formatter = logging.Formatter('%(asctime)s | %(levelname)8s | %(message)s')
+        formatter = logging.Formatter("%(asctime)s | %(levelname)8s | %(message)s")
         # Console Handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)

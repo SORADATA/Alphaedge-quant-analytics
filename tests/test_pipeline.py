@@ -1,6 +1,7 @@
 # test_pipeline.py
-from daily_run import run_pipeline
 import json
+
+from daily_run import run_pipeline
 
 # Charge un seul marché pour tester
 with open("config/markets/CAC40.json", "r") as f:
