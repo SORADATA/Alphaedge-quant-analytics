@@ -75,14 +75,106 @@ If you want this README to stay strictly accurate over time, update the numeric 
 
 ```mermaid
 graph TB
-    A[Market Data] --> B[ETL Pipeline]
-    B --> C[Feature Engineering]
-    C --> D[AlphaEdge Ensemble]
-    D --> E[Backtest & Signal Engine]
-    E --> F[Portfolio Optimization]
-    F --> G[Artifacts / Model Cards / Signals]
-    G --> H[Streamlit Dashboard]
-    D -.-> I[MLflow Registry]
+    subgraph P0["0 · Déclenchement et configuration"]
+        direction TB
+        Z1["⏰ GitHub Actions · daily_update.yml<br/>cron lun-ven + lancement manuel"] --> Z2["daily_run.py · boucle sur config/markets/*.yml<br/>market_name · tickers · ff_region · benchmark_ticker"]
+    end
+
+    subgraph P1["1 · EXTRACT · MarketExtractor"]
+        direction TB
+        A1["Appliquer les changements de tickers<br/>et exclure les titres delistés"] --> A2{"CSV brut existant ?"}
+        A2 -- Non --> A3["Téléchargement complet · history_years"]
+        A2 -- Oui --> A4["Delta · last_date - 5 jours"]
+        A3 --> A5["yfinance.download · retry x3, 5 s"]
+        A4 --> A5
+        A5 --> A6["Parse vers MultiIndex date, ticker<br/>colonnes en minuscules"]
+        A6 --> A7{"Validation ?<br/>vide · adj close absent · tout NaN"}
+        A7 -- Non --> A5
+        A7 -- Oui --> A8["Merge avec l'existant<br/>dédoublonnage keep=last"]
+        A8 --> A9[("data/raw/marché/marché_raw.csv")]
+    end
+
+    subgraph P2["2 · TRANSFORM · retraitement · MarketDataProcessor"]
+        direction TB
+        B1["Proxy adj close = close si absent"] --> B2["Validation et nettoyage des tickers<br/>alertes delisted / stale"]
+        B2 --> B3["Indicateurs journaliers<br/>RSI · Bollinger · ATR · MACD · Garman-Klass · euro_volume"]
+        B3 --> B4["Agrégation mensuelle BME<br/>moyenne du volume · dernière valeur des autres colonnes"]
+        B4 --> B5["Betas Fama-French par région<br/>RollingOLS · décalage 1 mois"]
+        B5 --> B6["Features alpha · voir étape 3"]
+        B6 --> B7["Lags t-1 des variables macro et volume"]
+        B7 --> B8[("daily_raw.parquet · monthly_features.parquet<br/>+ ticker_validation.json")]
+    end
+
+    subgraph P3["3 · FEATURE ENGINEERING · alpha_features.py"]
+        direction TB
+        C1["Momentum · returns 1 à 12 mois"] --> C2["Retour à la moyenne · z-score 12 mois"]
+        C2 --> C3["Volatilité · réalisée 3 et 12 mois"]
+        C3 --> C4["Risque ajusté · Sharpe · Sortino · Calmar"]
+        C4 --> C5["Risque extrême · skew · kurtosis · VaR · CVaR"]
+        C5 --> C6["Liquidité · Amihud · tendance du volume"]
+        C6 --> C7["Saisonnalité · sin/cos du mois"]
+        C7 --> C8["Rangs cross-sectionnels par date"]
+        C8 --> C9["Lags t-1 · nettoyage inf et NaN vers 0"]
+    end
+
+    subgraph P4["4 · MODÈLE CHAMPION · model_loader"]
+        direction TB
+        D1["Charger champion.pkl depuis Hugging Face"] --> D2{"Disponible ?"}
+        D2 -- Non --> D3["Fallback pickle local"]
+        D2 -- Oui --> D4["Cache en mémoire"]
+        D3 --> D4
+    end
+
+    subgraph P5["5 · SCORING ET SÉLECTION · backtest.py"]
+        direction TB
+        E1["Warm-up · exclure moins de 12 mois d'historique"] --> E2["Scoring · proba_upside par ticker<br/>XGBoost + LightGBM + Ridge vers méta-modèle"]
+        E2 --> E3["Sélection · proba ≥ PROBA_MIN<br/>top MAX_STOCKS_SELECT"]
+    end
+
+    subgraph P6["6 · OPTIMISATION DU PORTEFEUILLE"]
+        direction TB
+        F1["Prix des 252 derniers jours des titres retenus"] --> F2["Covariance Ledoit-Wolf"]
+        F2 --> F3["Black-Litterman · vues issues des probabilités"]
+        F3 --> F4["EfficientCVaR 95% · bornes de poids"]
+        F4 -. "échec ou moins de MIN_STOCKS" .-> F5["Equal weight"]
+    end
+
+    subgraph P7["7 · SIMULATION ET SIGNAUX"]
+        direction TB
+        G1["Rebalancement mensuel · turnover après dérive des poids"] --> G2["Coûts de transaction + frais de gestion journaliers"]
+        G2 --> G3["Courbe Strategy vs Benchmark"]
+        G3 --> G4["Signaux live du jour · BUY ou NEUTRAL + allocation"]
+    end
+
+    subgraph P8["8 · PUBLICATION"]
+        direction TB
+        H1[("portfolio_history · rebalance_history<br/>latest_signals · data_metadata.json")] --> H2["Sauvegarde locale parquet"]
+        H2 --> H3[("Upload Hugging Face Dataset<br/>source de vérité")]
+    end
+
+    subgraph P9["9 · TABLEAU DE BORD · Streamlit app.py"]
+        direction TB
+        I1["Chargement des données depuis Hugging Face"] --> I2["Dashboard · KPI · courbe vs benchmark · drawdown · allocation"]
+        I2 --> I3["Daily Signals"]
+        I3 --> I4["Data Explorer · cours en direct"]
+        I4 --> I5["Model Details · métriques du champion"]
+        I5 --> I6["Rebalance History"]
+    end
+
+    subgraph PT["Branche entraînement · ml_pipeline.yml · train.py"]
+        direction TB
+        T1["Cible · rendement du mois suivant supérieur à 0"] --> T2["Split temporel · test = 6 derniers mois"]
+        T2 --> T3["XGBoost et LightGBM · Optuna · CV purgée + embargo"]
+        T3 --> T4["Ridge calibré · probas OOF · méta LogisticRegression"]
+        T4 --> T5["Évaluation · walk-forward · shadow test du champion"]
+        T5 --> T6{"Promotion ?"}
+        T6 -- Oui --> T7[("MLflow alias champion<br/>+ champion.pkl sur Hugging Face")]
+        T6 -- Non --> T8["Challenger rejeté"]
+    end
+
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9
+    T7 -.->|"alimente"| P4
+    B6 -.->|"appelle"| P3
 ```
 
 ### Main Components
