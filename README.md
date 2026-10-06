@@ -2,9 +2,9 @@
 
 # 📈 AlphaEdge: AI-Powered Multi-Market Portfolio Manager
 
-**Production-Ready Quantitative Trading System with Daily MLOps Pipeline**
+**A quantitative portfolio system with a fully automated daily MLOps pipeline**
 
-Machine-learning driven portfolio allocation for CAC40, with a reusable architecture that can be extended to additional markets.
+Machine-learning driven stock selection and portfolio allocation, deployed on the CAC40 with an architecture designed to extend to other markets.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://cac40-smart-portfolio-asset.streamlit.app/)
@@ -13,7 +13,11 @@ Machine-learning driven portfolio allocation for CAC40, with a reusable architec
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-[🌐 **Live Dashboard**](https://cac40-smart-portfolio-asset.streamlit.app/) • [📊 **Performance**](#-performance-metrics) • [🏗️ **Architecture**](#️-system-architecture) • [🚀 **Quick Start**](#-quick-start) • [🐛 **Issues**](https://github.com/SORADATA/CAC40-Quantitative-Analysis-Predictive-Asset-Allocation/issues)
+[🌐 **Live Dashboard**](https://cac40-smart-portfolio-asset.streamlit.app/) •
+[📊 **Performance**](#-performance) •
+[🏗️ **Architecture**](#️-architecture) •
+[🚀 **Quick Start**](#-quick-start) •
+[🐛 **Issues**](https://github.com/SORADATA/CAC40-Quantitative-Analysis-Predictive-Asset-Allocation/issues)
 
 </div>
 
@@ -21,33 +25,41 @@ Machine-learning driven portfolio allocation for CAC40, with a reusable architec
 
 ## 🎯 Overview
 
-AlphaEdge is a quantitative portfolio management project that combines feature engineering, ensemble machine learning, portfolio optimization, and a Streamlit dashboard in a single codebase.
+AlphaEdge predicts, every month, which stocks of an index are likely to deliver a positive return, then turns those predictions into a risk-controlled portfolio.
 
-The current repository is organized around a **CAC40 production setup**, while keeping reusable modules for extension to other universes and market configurations.
+It combines in a single codebase:
+
+- **Feature engineering** on daily price data (momentum, risk, liquidity, technical indicators)
+- **An ensemble classifier** (XGBoost + LightGBM + Ridge, stacked) that outputs an upside probability per stock
+- **Portfolio optimization** (Black-Litterman + CVaR minimization)
+- **A daily automated pipeline** (GitHub Actions) that refreshes data, signals and the dashboard
+- **A model registry and promotion workflow** (MLflow) so that a new model only goes live if it beats the current champion
+
+The production setup targets the **CAC40**. Market-specific settings live in `config/markets/`, so other universes can be added without touching the core code.
 
 ---
 
 ## 🌟 Core Features
 
-### 🧠 Machine Learning Engine
-- Ensemble modeling with **XGBoost, LightGBM, Ridge, and Logistic Regression stacking**
-- Market regime detection using **K-Means** on technical features
-- Walk-forward validation to evaluate temporal robustness before promotion
+### 🧠 Machine Learning
+- Stacked ensemble: **XGBoost + LightGBM + calibrated Ridge**, combined by a **Logistic Regression** meta-model
+- Hyperparameter search with **Optuna**, validated with **purged cross-validation and embargo** to avoid temporal leakage
+- **Walk-forward evaluation** and a **shadow test** against the current champion before any promotion
 
 ### ⚖️ Portfolio Construction
-- Advanced asset allocation combining **Black-Litterman** (driven by ML upside probabilities) and **EfficientCVaR** (Expected Shortfall) to control extreme risks.
-- Ledoit-Wolf covariance shrinkage for more stable covariance estimates.
-- Monthly rebalancing with transaction cost handling and fallback allocation logic.
+- **Black-Litterman**, with views derived from the model's upside probabilities
+- **EfficientCVaR (95%)** to control tail risk, with weight bounds
+- **Ledoit-Wolf** covariance shrinkage for stable estimates
+- Monthly rebalancing with turnover, transaction costs and management fees; equal-weight fallback if the optimizer fails
 
-### ☁️ MLOps Workflow
-- MLflow-based registry / promotion workflow for model tracking
-- Local model fallback with `ensemble_model.pkl` and `model_card.json`
-- Automated workflows under `.github/workflows/` for training, releases, and updates
+### ☁️ MLOps
+- Daily scheduled run (Mon-Fri) via GitHub Actions, plus manual trigger
+- **MLflow** registry with a `champion` alias; artifacts stored on Hugging Face
+- Local model fallback (`ensemble_model.pkl` + `model_card.json`) if the remote registry is unavailable
+- Hugging Face Dataset used as the single source of truth for the dashboard
 
 ### 📊 Visualization
-- Streamlit dashboard for performance monitoring and signal inspection
-- Dashboard screenshots already included in `images/`
-- Changelog and contribution files maintained at repository root
+- Streamlit dashboard: KPIs, strategy vs benchmark, drawdown, allocation, daily signals, model details, rebalance history
 
 ---
 
@@ -63,35 +75,75 @@ The current repository is organized around a **CAC40 production setup**, while k
 
 ---
 
-## 📊 Performance Metrics
+## 📊 Performance
 
-The dashboard section can display strategy return, benchmark comparison, drawdown, and signal information.
+> ⚠️ Backtest results, **not live trading results**. Past performance does not guarantee future results.
 
-If you want this README to stay strictly accurate over time, update the numeric metrics directly from the latest dashboard or backtest output before each release.
+| Metric | Strategy | CAC40 (benchmark) |
+|---|:---:|:---:|
+| Annualized return | _TBD_ | _TBD_ |
+| Annualized volatility | _TBD_ | _TBD_ |
+| Sharpe ratio | _TBD_ | _TBD_ |
+| Max drawdown | _TBD_ | _TBD_ |
+| Calmar ratio | _TBD_ | _TBD_ |
+| Avg. monthly turnover | _TBD_ | n/a |
+
+**Backtest setup** (fill in before publishing):
+
+- Period: _YYYY-MM to YYYY-MM_
+- Rebalancing: monthly
+- Transaction cost: _X bps_ per trade (`TRANSACTION_COST`), management fee: _X%_ per year
+- Universe: current CAC40 constituents _(see Limitations: survivorship bias)_
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture
 
 ```mermaid
-graph TB
-    A[Market Data] --> B[ETL Pipeline]
-    B --> C[Feature Engineering]
-    C --> D[AlphaEdge Ensemble]
-    D --> E[Backtest & Signal Engine]
-    E --> F[Portfolio Optimization]
-    F --> G[Artifacts / Model Cards / Signals]
-    G --> H[Streamlit Dashboard]
-    D -.-> I[MLflow Registry]
+flowchart LR
+    A["⏰ GitHub Actions<br/>daily, Mon-Fri"] --> B["📥 Extract<br/>yfinance"]
+    B --> C["⚙️ Transform<br/>indicators + monthly aggregation"]
+    C --> D["🧪 Feature Engineering<br/>momentum, risk, liquidity"]
+    D --> E["🤖 Champion Model<br/>XGBoost + LightGBM + Ridge"]
+    E --> F["⚖️ Portfolio Optimization<br/>Black-Litterman + CVaR"]
+    F --> G["📊 Backtest & Signals<br/>monthly rebalancing"]
+    G --> H[("🤗 Hugging Face<br/>Dataset")]
+    H --> I["🖥️ Streamlit Dashboard"]
+
+    subgraph Training["Training pipeline (ml_pipeline.yml)"]
+        direction LR
+        T1["Optuna tuning<br/>purged CV"] --> T2["Walk-forward<br/>+ shadow test"] --> T3{"Promote?"}
+        T3 -- yes --> T4[("MLflow<br/>champion")]
+    end
+
+    T4 -.-> E
 ```
+
+The top row is the **daily inference pipeline**; the bottom box is the **training pipeline**, which only updates the production model when a challenger beats the champion.
+
+👉 For a step-by-step breakdown of each stage, see [`docs/architecture.md`](docs/architecture.md).
 
 ### Main Components
 
-1. **Extraction layer**: market data loading and preprocessing
-2. **Feature layer**: momentum, volatility, risk-adjusted, and technical features
-3. **Model layer**: ensemble training, cross-validation, model loading, and promotion logic
-4. **Pipeline layer**: ETL, backtest, and daily execution utilities
-5. **Presentation layer**: Streamlit app for monitoring results
+| Layer | Responsibility | Location |
+|---|---|---|
+| Extraction | Market data download, validation, incremental update | `src/extract/` |
+| Transform | Cleaning, daily indicators, monthly aggregation, Fama-French betas | `src/transform/` |
+| Features | Momentum, mean reversion, risk-adjusted, liquidity, seasonality | `src/features/` |
+| Models | Ensemble, purged CV, training, champion loading | `src/models/` |
+| Pipeline | ETL, backtest, optimization, daily run | `src/pipeline/` |
+| Presentation | Streamlit dashboard | `app.py` |
+
+---
+
+## 🧭 Design Choices
+
+- **Purged CV with embargo**: monthly targets overlap in time, so a standard K-fold would leak future information into training. Purging and an embargo period prevent this.
+- **Stacking with out-of-fold probabilities**: the meta-model is trained on OOF predictions only, so it never sees in-sample base-model outputs.
+- **Black-Litterman**: ML probabilities are used as *views* on top of a market prior, which avoids the extreme weights that raw expected-return forecasts typically produce.
+- **CVaR instead of variance**: equity returns have fat tails; minimizing Expected Shortfall targets the losses that actually matter.
+- **Ledoit-Wolf shrinkage**: with ~40 assets and 252 daily observations, the sample covariance matrix is noisy. Shrinkage makes the optimization more stable.
+- **Champion / challenger promotion**: a new model must pass walk-forward metrics and a shadow test (`SHARPE_THRESHOLD`, `MAX_DD_THRESHOLD`) before replacing the production model.
 
 ---
 
@@ -101,8 +153,8 @@ graph TB
 
 - Python 3.10+
 - Git
-- Recommended: virtual environment
-- Optional: `HF_TOKEN` for remote sync / registry integration
+- Recommended: a virtual environment
+- Optional: `HF_TOKEN` for Hugging Face sync and registry access
 
 ### Installation
 
@@ -114,21 +166,16 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Run the dashboard
+### Usage
 
 ```bash
+# Launch the dashboard
 streamlit run app.py
-```
 
-### Run the daily pipeline
-
-```bash
+# Run the daily pipeline (extract -> features -> scoring -> optimization -> publish)
 python src/pipeline/daily_run.py
-```
 
-### Train the model
-
-```bash
+# Train a new challenger model
 python src/models/train.py
 ```
 
@@ -138,67 +185,23 @@ python src/models/train.py
 
 ```text
 .
-├── .github
-│   └── workflows
-│       ├── daily_update.yml
-│       ├── ml_pipeline.yml
-│       ├── pre-release.yml
-│       ├── python-app.yml
-│       └── release.yml
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── README.md
-├── app.py
-├── config
-│   └── markets
-│       └── cac40.json
-├── const.py
-├── debug_run.txt
-├── dev.sh
-├── images
-│   ├── Dashboard.png
-│   └── Signal.png
-├── notebooks
-│   └── 01_EDA.ipynb
+├── .github/workflows/        # daily_update, ml_pipeline, release, pre-release, python-app
+├── config/markets/           # one config file per market (cac40.json)
+├── docs/                     # architecture.md and dashboard screenshots
+├── notebooks/                # exploratory analysis
+├── src/
+│   ├── extract/              # MarketExtractor (yfinance)
+│   ├── transform/            # MarketDataProcessor, ticker management
+│   ├── features/             # alpha_features.py
+│   ├── models/               # ensemble, cv, train, model_loader, local fallback models
+│   ├── pipeline/             # etl, backtest, daily_run
+│   └── utils/                # config, logging, metrics, math helpers
+├── tests/
+├── app.py                    # Streamlit dashboard
+├── const.py                  # global parameters and thresholds
 ├── requirements.txt
-├── src
-│   ├── extract
-│   │   ├── extractor.py
-│   │   └── yfinance_downloader_test.py
-│   ├── features
-│   │   └── alpha_features.py
-│   ├── models
-│   │   ├── CAC40
-│   │   │   ├── ensemble_model.pkl
-│   │   │   └── model_card.json
-│   │   ├── US_TECH
-│   │   │   ├── ensemble_model.pkl
-│   │   │   └── model_card.json
-│   │   ├── __init__.py
-│   │   ├── cv.py
-│   │   ├── ensemble.py
-│   │   ├── ensemble_model.pkl
-│   │   ├── model_card.json
-│   │   ├── model_loader.py
-│   │   └── train.py
-│   ├── pipeline
-│   │   ├── backtest.py
-│   │   ├── daily_run.py
-│   │   └── etl.py
-│   ├── transform
-│   │   ├── processor.py
-│   │   └── ticker_manager.py
-│   └── utils
-│       ├── config_loader.py
-│       ├── feature_utils.py
-│       ├── logger.py
-│       ├── market_utils.py
-│       ├── math_utils.py
-│       └── metrics.py
-└── tests
-    ├── get_composition.py
-    ├── plot_results.py
-    └── test_pipeline.py
+├── CHANGELOG.md
+└── CONTRIBUTING.md
 ```
 
 ---
@@ -207,59 +210,48 @@ python src/models/train.py
 
 ### Add a new market
 
-Create a new JSON file in `config/markets/`, for example:
+Create a new file in `config/markets/`, for example `sp500.json`:
 
 ```json
 {
   "market_name": "SP500",
   "tickers": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
+  "ff_region": "US",
   "benchmark_ticker": "^GSPC"
 }
 ```
 
-Then adapt the training and pipeline entry points so the new configuration is discovered and processed consistently.
+`daily_run.py` loops over every market configuration, so the new market is picked up automatically. A dedicated model can be trained and stored in `src/models/<MARKET>/`.
 
-### Useful parameters
+### Key parameters
 
 | Parameter | Role |
 |---|---|
-| `SHARPE_THRESHOLD` | Promotion safety threshold |
-| `MAX_DD_THRESHOLD` | Max drawdown safety filter |
-| `PROBA_MIN` | Minimum prediction probability for selection |
-| `MAX_STOCKS_SELECT` | Maximum number of selected assets |
-| `MIN_STOCKS_OPTIM` | Minimum assets required for optimizer |
-| `TRANSACTION_COST` | Cost applied at rebalance |
+| `SHARPE_THRESHOLD` | Minimum Sharpe required for promotion |
+| `MAX_DD_THRESHOLD` | Maximum drawdown allowed for promotion |
+| `PROBA_MIN` | Minimum upside probability for a stock to be selected |
+| `MAX_STOCKS_SELECT` | Maximum number of selected stocks |
+| `MIN_STOCKS_OPTIM` | Minimum number of stocks required to run the optimizer |
+| `TRANSACTION_COST` | Cost applied at each rebalance |
 | `BACKTEST_YEARS` | Lookback window used in backtesting |
 
 ---
 
-## 📚 Technical Notes
+## ⚠️ Limitations
 
-### Feature Engineering
-
-The project computes momentum, mean-reversion, volatility, technical, and risk-adjusted features inside `src/features/alpha_features.py`.
-
-This layer is central because it transforms raw price history into the model inputs used for ranking and allocation.
-
-### Training Stack
-
-The training logic lives in `src/models/train.py`, while the ensemble definition is implemented in `src/models/ensemble.py`.
-
-Model loading and champion selection behavior are handled through `src/models/model_loader.py` plus local fallback artifacts.
-
-### Backtesting
-
-The simulation and rebalance logic are implemented in `src/pipeline/backtest.py`.
-
-This is where signal generation, allocation logic, and portfolio performance evaluation come together.
+- **Survivorship bias**: the universe is based on current constituents, which flatters historical results.
+- **Simplified execution**: no slippage, market impact or liquidity constraints beyond the flat transaction cost.
+- **Data quality**: yfinance is a free source with occasional gaps and corporate-action errors.
+- **Backtest overfitting risk**: hyperparameter tuning and repeated model selection on the same history can overstate performance.
+- **Single-market validation**: results on the CAC40 do not necessarily transfer to other universes.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome through issues, discussions, and pull requests.
+Contributions are welcome through issues, discussions and pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Before opening a PR, run formatting, linting, and tests locally where applicable.
+Before opening a PR:
 
 ```bash
 black src/ --check
@@ -271,9 +263,7 @@ pytest tests/
 
 ## ⚠️ Disclaimer
 
-This repository is for **educational and research purposes only**.
-
-It does not constitute financial advice, and past performance does not guarantee future results.
+This repository is for **educational and research purposes only**. It does not constitute financial advice, and past performance does not guarantee future results.
 
 ---
 
@@ -281,7 +271,7 @@ It does not constitute financial advice, and past performance does not guarantee
 
 Developed as part of the **Master 2 - Statistics Expertise for Finance & Economics** program at **Université de Lorraine**.
 
-Thanks to the open-source ecosystem around Streamlit, scikit-learn, XGBoost, LightGBM, PyPortfolioOpt, and MLflow.
+Built on the open-source ecosystem around Streamlit, scikit-learn, XGBoost, LightGBM, PyPortfolioOpt, Optuna and MLflow.
 
 ---
 
