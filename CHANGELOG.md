@@ -1,3 +1,15 @@
+## <small>1.17.3 (2026-11-06)</small>
+
+* Merge pull request #33 from SORADATA/renovate/python-3.x ([6b046e2](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/6b046e2)), closes [#33](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/33)
+* Merge pull request #36 from SORADATA/renovate/actions-checkout-7.x ([847b69f](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/847b69f)), closes [#36](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/36)
+* Merge pull request #37 from SORADATA/fix/alphaedge ([1929873](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/1929873)), closes [#37](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/37)
+* Merge pull request #39 from SORADATA/renovate/pandas-3.x ([369121f](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/369121f)), closes [#39](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/39)
+* fix(deps): update dependency pandas to >=3.1.1,<3.2.0 ([0fb2314](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/0fb2314))
+* docs: add global architecture ([66afeb6](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/66afeb6))
+* docs: update system architecture ([adf997e](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/adf997e))
+* chore(deps): update actions/checkout action to v7 ([9afab78](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/9afab78))
+* chore(deps): update python to >=3.14,<=3.14.8 ([232574c](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/232574c))
+
 ## <small>1.17.2 (2026-09-24)</small>
 
 * Fix linting et desactivation temporaire règles strictes ([e22a47f](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/e22a47f))
