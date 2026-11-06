@@ -2,7 +2,7 @@
 name = "alphaedge"
 version = "1.0.0"
 description = "Quantitative finance and portfolio optimization application"
-requires-python = ">=3.14,<=3.14.8"
+requires-python = ">=3.15,<=3.15.2"
 
 dependencies = [
     # Data manipulation
