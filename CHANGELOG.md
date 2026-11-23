@@ -1,3 +1,8 @@
+## <small>1.17.4 (2026-11-23)</small>
+
+* Merge pull request #40 from SORADATA/renovate/pyyaml-6.x ([628dccf](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/628dccf)), closes [#40](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/40)
+* fix(deps): update dependency pyyaml to v6.0.4 ([dd4daa3](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/dd4daa3))
+
 ## <small>1.17.3 (2026-11-06)</small>
 
 * Merge pull request #33 from SORADATA/renovate/python-3.x ([6b046e2](https://github.com/SORADATA/Alphaedge-quant-analytics/commit/6b046e2)), closes [#33](https://github.com/SORADATA/Alphaedge-quant-analytics/issues/33)
